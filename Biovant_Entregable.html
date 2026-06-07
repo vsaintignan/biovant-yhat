@@ -1,0 +1,382 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+  <title>Biovant — One Pager</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:ital,wght@0,300;0,400;0,500;0,600;0,700;1,400;1,500&display=swap" rel="stylesheet"/>
+  <style>
+    @page {
+      size: A4 portrait;
+      margin: 9mm 11mm 8mm 11mm;
+    }
+
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: 'Inter', 'Calibri', 'Segoe UI', Arial, sans-serif;
+      background: white;
+      color: #1f2937;
+      font-size: 7.9pt;
+      line-height: 1.38;
+      -webkit-print-color-adjust: exact;
+      print-color-adjust: exact;
+    }
+
+    @media screen {
+      body { background: #d1d5db; padding: 24px; display: flex; justify-content: center; align-items: flex-start; min-height: 100vh; }
+      .page { box-shadow: 0 8px 32px rgba(0,0,0,0.22); margin: 0 auto; }
+    }
+
+    @media print {
+      body { background: white; padding: 0; }
+      .page { box-shadow: none; }
+    }
+
+    /* ── PAGE ─────────────────────────────────────────────────────── */
+    .page {
+      background: white;
+      width: 210mm;
+      padding: 9mm 11mm 8mm 11mm;
+    }
+
+    /* ── HEADER ──────────────────────────────────────────────────── */
+    .header {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      margin-bottom: 3.5pt;
+      gap: 6pt;
+    }
+
+    .brand-block {
+      display: flex;
+      align-items: center;
+      gap: 7pt;
+      flex: 1;
+    }
+
+    .brand-icon { width: 34pt; height: 34pt; flex-shrink: 0; }
+
+    .brand-text {}
+
+    .brand-name {
+      font-size: 23pt;
+      font-weight: 700;
+      color: #1a4a6b;
+      letter-spacing: -0.6pt;
+      line-height: 1;
+    }
+
+    .brand-subtitle {
+      font-size: 7.8pt;
+      color: #3d5a75;
+      font-weight: 400;
+      margin-top: 1.5pt;
+      letter-spacing: 0.005em;
+      line-height: 1.3;
+    }
+
+    .header-meta {
+      text-align: right;
+      font-size: 6.3pt;
+      color: #6b7280;
+      line-height: 1.5;
+      padding-top: 3pt;
+      flex-shrink: 0;
+    }
+
+    .header-meta .link-blue { color: #1a4a6b; font-weight: 600; }
+    .header-meta .link-green { color: #1d6645; font-weight: 600; }
+
+    /* gradient divider */
+    .divider {
+      height: 1.8pt;
+      background: linear-gradient(to right, #1a4a6b 0%, #1d6645 50%, #1a4a6b 100%);
+      border-radius: 1pt;
+      margin-bottom: 5pt;
+    }
+
+    /* ── BODY: CSS TWO-COLUMN FLOW ───────────────────────────────── */
+    .cols {
+      column-count: 2;
+      column-gap: 5mm;
+      column-fill: balance;
+      orphans: 2; widows: 2;
+    }
+
+    /* ── PARAGRAPHS ──────────────────────────────────────────────── */
+    p {
+      font-size: 7.9pt;
+      line-height: 1.38;
+      color: #1f2937;
+      margin-bottom: 4pt;
+      text-align: justify;
+      hyphens: auto;
+    }
+
+    /* ── SECTION HEADERS ─────────────────────────────────────────── */
+    .sec {
+      font-size: 7.3pt;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.09em;
+      color: #1a4a6b;
+      margin: 5.5pt 0 3.5pt;
+      padding-bottom: 2pt;
+      border-bottom: 1pt solid #bfd0e3;
+      display: flex;
+      align-items: center;
+      gap: 4pt;
+      break-after: avoid;
+      page-break-after: avoid;
+    }
+    .sec.g { color: #1d6645; border-bottom-color: #a8cbb8; }
+
+    .sec-mark {
+      width: 4.5pt; height: 4.5pt;
+      background: currentColor;
+      border-radius: 50%;
+      flex-shrink: 0;
+    }
+
+    /* ── INTELLIGENCE CARDS ──────────────────────────────────────── */
+    .card {
+      display: flex;
+      gap: 4.5pt;
+      padding: 4pt 5.5pt;
+      border-left: 2.5pt solid #1a4a6b;
+      background: #f2f6fb;
+      border-radius: 0 2.5pt 2.5pt 0;
+      margin-bottom: 3pt;
+      break-inside: avoid;
+      page-break-inside: avoid;
+    }
+    .card.g { border-left-color: #1d6645; background: #eef7f1; }
+
+    .card-ico {
+      font-size: 10pt;
+      line-height: 1.3;
+      flex-shrink: 0;
+      width: 13pt;
+      text-align: center;
+    }
+
+    .card-title {
+      font-size: 7.6pt;
+      font-weight: 600;
+      color: #1f2937;
+      margin-bottom: 1pt;
+      line-height: 1.25;
+    }
+
+    .card-body {
+      font-size: 7.3pt;
+      color: #374151;
+      line-height: 1.36;
+      text-align: justify;
+      hyphens: auto;
+    }
+
+    /* ── BULLET LIST ─────────────────────────────────────────────── */
+    .blist { list-style: none; margin: 2pt 0 4pt 0; }
+    .blist li {
+      font-size: 7.7pt;
+      color: #374151;
+      line-height: 1.36;
+      padding-left: 10pt;
+      margin-bottom: 1.5pt;
+      position: relative;
+    }
+    .blist li::before {
+      content: '›';
+      position: absolute;
+      left: 1pt;
+      color: #1a4a6b;
+      font-weight: 700;
+      font-size: 9pt;
+      line-height: 1.15;
+    }
+
+    .italic-p {
+      font-style: italic;
+      color: #374151;
+      font-size: 7.7pt;
+      line-height: 1.38;
+      text-align: justify;
+      hyphens: auto;
+      margin-bottom: 4pt;
+    }
+
+    /* ── REFERENCES ──────────────────────────────────────────────── */
+    .ref {
+      font-size: 6.6pt;
+      line-height: 1.32;
+      color: #374151;
+      padding: 2pt 0 2pt 5.5pt;
+      border-left: 1pt solid #bfd0e3;
+      margin-bottom: 2.5pt;
+      break-inside: avoid;
+      page-break-inside: avoid;
+    }
+    .ref em { font-style: italic; color: #1f2937; }
+    .ref-url {
+      display: block;
+      color: #1a4a6b;
+      font-size: 6pt;
+      word-break: break-all;
+      margin-top: 0.5pt;
+      opacity: 0.85;
+    }
+
+    /* ── CLOSING BOX ─────────────────────────────────────────────── */
+    .closing {
+      margin-top: 5pt;
+      padding: 5pt 8pt;
+      background: linear-gradient(135deg, #eef3f8 0%, #edf6f1 100%);
+      border: 0.75pt solid #b3c9dc;
+      border-radius: 3pt;
+      break-inside: avoid;
+      page-break-inside: avoid;
+    }
+    .closing p {
+      font-size: 7.9pt;
+      font-weight: 500;
+      font-style: italic;
+      color: #1a2332;
+      text-align: center;
+      margin: 0;
+      line-height: 1.45;
+    }
+  </style>
+</head>
+<body>
+<div class="page">
+
+  <!-- ══ HEADER ═══════════════════════════════════════════════════ -->
+  <div class="header">
+
+    <div class="brand-block">
+      <!-- Brand mark: droplet + cellular element -->
+      <svg class="brand-icon" viewBox="0 0 34 34" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <path d="M17 2.5 C17 2.5 6.5 14 6.5 20.5 A10.5 10.5 0 0 0 27.5 20.5 C27.5 14 17 2.5 17 2.5Z"
+              fill="#1a4a6b" fill-opacity="0.09" stroke="#1a4a6b" stroke-width="1.3" stroke-linejoin="round"/>
+        <circle cx="17" cy="21" r="5.5" fill="#1d6645" fill-opacity="0.12" stroke="#1d6645" stroke-width="0.9"/>
+        <circle cx="17" cy="21" r="2.2" fill="#1a4a6b" fill-opacity="0.55"/>
+        <!-- cilia suggestions -->
+        <circle cx="17"   cy="15.3" r="1.1"  fill="#1a4a6b" fill-opacity="0.75"/>
+        <circle cx="21.8" cy="23"   r="0.9"  fill="#1d6645" fill-opacity="0.75"/>
+        <circle cx="12.2" cy="23"   r="0.9"  fill="#1d6645" fill-opacity="0.75"/>
+        <circle cx="21"   cy="17.5" r="0.65" fill="#1a4a6b" fill-opacity="0.45"/>
+        <circle cx="13"   cy="17.5" r="0.65" fill="#1a4a6b" fill-opacity="0.45"/>
+      </svg>
+
+      <div class="brand-text">
+        <div class="brand-name">Biovant</div>
+        <div class="brand-subtitle">Inteligencia biológica predictiva para tratamientos de efluentes industriales</div>
+      </div>
+    </div>
+
+    <div class="header-meta">
+      Hackathon 2026 &nbsp;·&nbsp; Industria Frigorífica<br/>
+      <span class="link-blue">vsaintignan.github.io/biovant-yhat</span><br/>
+      <span class="link-green">biovant-yhat.onrender.com</span>
+    </div>
+
+  </div><!-- /header -->
+  <div class="divider"></div>
+
+  <!-- ══ BODY — BALANCED TWO-COLUMN FLOW ══════════════════════════ -->
+  <div class="cols">
+
+    <!-- ── Intro ──────────────────────────────────────────────── -->
+    <p>Biovant detecta alteraciones en los sistemas biológicos de tratamiento de efluentes industriales antes de que se traduzcan en contaminación ambiental o pérdida de desempeño del proceso. Frente a mercados internacionales cada vez más exigentes en sostenibilidad y transparencia ambiental, Biovant permite a las industrias anticiparse, fortalecer sus prácticas ambientales y prepararse para auditorías y estándares cada vez más rigurosos.</p>
+
+    <p>Las plantas de tratamiento biológico basadas en lodos activados dependen del equilibrio de comunidades microbianas complejas para remover la contaminación del agua residual. Sin embargo, la mayoría de las industrias continúa operando de forma reactiva: los problemas suelen detectarse cuando el deterioro del sistema ya ocurrió o cuando los parámetros regulatorios están cerca del incumplimiento.</p>
+
+    <p>Este desafío es especialmente relevante para la industria frigorífica argentina, donde los efluentes presentan elevadas cargas de grasas, proteínas y materia orgánica. Al mismo tiempo, la evolución del acuerdo entre la Unión Europea y Mercosur, junto con iniciativas como el European Green Deal y la estrategia Farm to Fork, impulsan mayores exigencias en sostenibilidad, desempeño ambiental y trazabilidad de los procesos productivos. En este contexto, demostrar una gestión ambiental robusta deja de ser solo una obligación normativa y se convierte en una ventaja competitiva para acceder y sostener mercados estratégicos.</p>
+
+    <!-- ── 4 Niveles ────────────────────────────────────────── -->
+    <div class="sec">
+      <span class="sec-mark"></span>
+      Biovant integra cuatro niveles de inteligencia
+    </div>
+
+    <div class="card">
+      <div class="card-ico">⚙</div>
+      <div>
+        <div class="card-title">Sensores operativos convencionales</div>
+        <div class="card-body">Monitoreo de NH₄⁺, oxígeno disuelto (OD), pH, temperatura, DBO, DQO, caudal y actividad deshidrogenasa.</div>
+      </div>
+    </div>
+
+    <div class="card g">
+      <div class="card-ico">🔬</div>
+      <div>
+        <div class="card-title">Vibrio Sentinel</div>
+        <div class="card-body">Detección temprana de toxicidad mediante la bioluminiscencia natural de <em>Vibrio fischeri</em>. Este principio se encuentra validado internacionalmente mediante la norma ISO 11348 y ha sido incorporado en normativas y aplicaciones para monitoreo de toxicidad en aguas residuales, incluyendo estándares utilizados en México. Biovant incorpora esta señal biológica temprana al proceso de toma de decisiones.</div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-ico">🧫</div>
+      <div>
+        <div class="card-title">EcoSentinel</div>
+        <div class="card-body">Sistema inspirado en el Sludge Biotic Index (SBI). A partir de imágenes obtenidas con microscopio digital, el operador registra la presencia de protozoos indicadores del lodo activado (ciliados, flagelados, amebas y bacterias filamentosas). Esta práctica continúa siendo manual, pero Biovant la estructura, digitaliza y vuelve trazable, generando además un dataset propio para futuras etapas de automatización mediante visión computacional.</div>
+      </div>
+    </div>
+
+    <div class="card g">
+      <div class="card-ico">📊</div>
+      <div>
+        <div class="card-title">Patrones históricos de riesgo</div>
+        <div class="card-body">Biovant integra señales químicas, ecológicas y de toxicidad para calcular un Biomass Health Index (BHI), estimar el riesgo de deterioro del sistema e identificar patrones históricos asociados a eventos críticos en cada planta. A partir de esta información, genera recomendaciones operativas concretas y adaptadas al contexto específico de la instalación.</div>
+      </div>
+    </div>
+
+    <!-- ── Diferencial ─────────────────────────────────────── -->
+    <div class="sec g">
+      <span class="sec-mark"></span>
+      Nuestro diferencial
+    </div>
+
+    <p>Su innovación radica en integrar evidencia científica consolidada que hoy se encuentra fragmentada. Mientras que las soluciones actuales monitorean parámetros aislados o reaccionan cuando el problema ya ocurrió, Biovant combina:</p>
+
+    <ul class="blist">
+      <li>monitoreo químico tradicional,</li>
+      <li>toxicidad mediante bioluminiscencia,</li>
+      <li>ecología microbiana del lodo activado,</li>
+      <li>análisis predictivo orientado a la toma de decisiones.</li>
+    </ul>
+
+    <p class="italic-p">De esta manera, transforma un tratamiento reactivo en un sistema preventivo capaz de escuchar a la biología antes de que falle.</p>
+
+    <!-- ── Fundamentación ─────────────────────────────────── -->
+    <div class="sec">
+      <span class="sec-mark"></span>
+      Fundamentación científica
+    </div>
+
+    <div class="ref">Madoni, P. (1994). <em>A Sludge Biotic Index (SBI) for the evaluation of the biological performance of activated sludge plants.</em> Water Research.<span class="ref-url">https://doi.org/10.1016/0043-1354(94)90120-1</span></div>
+
+    <div class="ref">ISO 11348. <em>Water quality — Determination of the inhibitory effect of water samples on the light emission of Vibrio fischeri.</em><span class="ref-url">https://www.iso.org/standard/40518.html</span></div>
+
+    <div class="ref">NMX-AA-112-SCFI-2017 (México). Norma basada en el ensayo de inhibición de bioluminiscencia con <em>Vibrio fischeri</em> para evaluación de toxicidad acuática.<span class="ref-url">https://www.dof.gob.mx</span></div>
+
+    <div class="ref">Scientific Data (2025). <em>Image dataset of microfauna in activated sludge.</em><span class="ref-url">https://www.nature.com/articles/s41597-025-04709-z</span></div>
+
+    <div class="ref">Breiman, L. (2001). <em>Random Forests.</em> Machine Learning.<span class="ref-url">https://link.springer.com/article/10.1023/A:1010933404324</span></div>
+
+    <div class="ref">European Commission. <em>Farm to Fork Strategy.</em><span class="ref-url">https://food.ec.europa.eu/horizontal-topics/farm-fork-strategy_en</span></div>
+
+    <div class="ref">European Commission. <em>The European Green Deal.</em><span class="ref-url">https://commission.europa.eu/strategy-and-policy/priorities-2019-2024/european-green-deal_en</span></div>
+
+    <!-- ── Closing ─────────────────────────────────────────── -->
+    <div class="closing">
+      <p>Biovant transforma ecosistemas biológicos complejos en sistemas predictivos, ayudando a la industria a prevenir contaminación, fortalecer su desempeño ambiental y prepararse para un futuro donde la sostenibilidad será un requisito para competir.</p>
+    </div>
+
+  </div><!-- /cols -->
+</div><!-- /page -->
+</body>
+</html>
