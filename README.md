@@ -1,116 +1,79 @@
-# Biovant — Plataforma de Inteligencia Biológica Predictiva
+# Biovant
 
-Sistema de monitoreo inteligente para plantas de tratamiento de efluentes en la industria frigorífica. Combina sensores biológicos en tiempo real, microscopía digital automatizada, y un modelo predictivo (Random Forest) para anticipar incumplimientos regulatorios antes de que ocurran.
+> Inteligencia biológica predictiva para tratamientos de efluentes industriales.
 
----
-
-## Propuesta de valor
-
-Las plantas de tratamiento de efluentes frigoríficos enfrentan multas, clausuras y daño ambiental cuando la biomasa colapsa sin aviso. Biovant detecta las señales tempranas del deterioro biológico y predice el riesgo de incumplimiento regulatorio con 24–48 horas de anticipación, permitiendo intervenciones preventivas en lugar de correctivas.
-
-**Diferenciadores:**
-- **EcoSentinel™** — análisis de comunidad microbiana via microscopía digital (Madoni Sludge Biotic Index, 1994)
-- **Vibrio Sentinel™** — ensayo de toxicidad por bioluminiscencia *V. fischeri* (ISO 11348 / Microtox-equivalente)
-- **BHI (Biomass Health Index)** — índice unificado 0–100 que integra actividad deshidrogenasa, OD, amonio y toxicidad
-- **Cumplimiento normativo multi-marco** — Decreto 674/89, Res. ADA PBA, límites internos y exportación UE/Halal
-- **Patrones históricos por planta** — el modelo aprende de los eventos críticos de cada instalación específica
+Biovant transforma señales biológicas complejas en información accionable para anticipar deterioros en sistemas de tratamiento de efluentes industriales antes de que se conviertan en contaminación.
 
 ---
 
-## Tecnologías
+## 🌐 Dashboard interactivo:
 
-| Capa | Stack |
-|---|---|
-| Frontend | React 18 (CDN, sin build step), Babel Standalone, SVG charts custom |
-| Backend | FastAPI, Uvicorn, Python 3.11 |
-| ML | scikit-learn — Random Forest (100 árboles, class_weight='balanced', Recall ≥ 90%) |
-| Datos | pandas, joblib |
-| Deploy Frontend | GitHub Pages |
-| Deploy Backend | Render |
+
+https://vsaintignan.github.io/biovant-yhat/
 
 ---
 
-## Correr localmente
+## 🎥 Video demostración
 
-### Requisitos
-- Python 3.9+
-- pip
+Conocé el problema, la solución y una demostración del prototipo:
 
-### Backend
-
-```bash
-cd backend
-pip install -r requirements.txt
-python train_model.py        # entrena el modelo (genera model_compliance.pkl)
-uvicorn main:app --reload    # inicia en http://localhost:8000
-```
-
-### Frontend
-
-Abrir directamente en el navegador:
-
-```
-frontend/index.html
-```
-
-O acceder vía el backend (que sirve el frontend en `GET /`):
-
-```
-http://localhost:8000
-```
-
-> El frontend detecta automáticamente si está corriendo en local y usa `http://localhost:8000`. En producción usa la URL de Render.
+https://www.youtube.com/watch?v=8bvXhp_yIrM
 
 ---
 
-## Despliegue
+## 💡 ¿Qué problema resolvemos?
 
-### Backend — Render
-
-1. Crear una cuenta en [render.com](https://render.com)
-2. **New Web Service** → conectar el repo `vsaintignan/biovant-yhat`
-3. Render detecta `render.yaml` automáticamente y configura:
-   - **Root Directory:** `backend`
-   - **Build Command:** `pip install -r requirements.txt`
-   - **Start Command:** `uvicorn main:app --host 0.0.0.0 --port $PORT`
-4. Hacer deploy — la URL del servicio será: `https://biovant-yhat.onrender.com`
-
-> **Nota:** el plan gratuito de Render puede tardar ~30 segundos en responder la primera request (cold start). Esto es normal.
-
-### Frontend — GitHub Pages
-
-1. Ir a **Settings → Pages** en el repo `vsaintignan/biovant-yhat`
-2. **Source:** Deploy from a branch
-3. **Branch:** `main` · **Folder:** `/frontend`
-4. Guardar — GitHub Pages publicará en: `https://vsaintignan.github.io/biovant-yhat/`
+Las industrias suelen detectar fallas en sus tratamientos biológicos cuando el deterioro o el riesgo de contaminación ya ocurrieron. Biovant permite pasar de una gestión reactiva a una prevención inteligente, fortaleciendo el desempeño ambiental y preparándose para estándares cada vez más exigentes.
 
 ---
 
-## Links
+## ⚙️ ¿Cómo funciona?
 
-| Recurso | URL |
-|---|---|
-| Frontend (GitHub Pages) | https://vsaintignan.github.io/biovant-yhat/ |
-| Backend API (Render) | https://biovant-yhat.onrender.com |
-| Documentación API (Swagger) | https://biovant-yhat.onrender.com/docs |
+Biovant integra cuatro niveles de inteligencia:
 
----
-
-## Escenarios de demostración
-
-El dashboard incluye tres escenarios predefinidos para evaluación:
-
-| Escenario | BHI | Descripción |
-|---|---|---|
-| Operación Normal | ~89 | Biomasa estable, todos los indicadores en rango |
-| Biomasa Bajo Estrés | ~55 | Señales tempranas de deterioro, flagelados elevados |
-| Riesgo de Falla | ~22 | Filamentosas dominantes, Vibrio en alerta crítica |
+* 🔬 **Sensores operativos convencionales:** NH₄⁺, OD, pH, temperatura, DBO, DQO, caudal y actividad deshidrogenasa.
+* ✨ **Vibrio Sentinel:** detección temprana de toxicidad mediante bioluminiscencia de *Vibrio fischeri*.
+* 🦠 **EcoSentinel:** monitoreo ecológico del lodo activado mediante bioindicadores microscópicos.
+* 📈 **Patrones históricos de riesgo:** integración de señales para anticipar deterioros y generar recomendaciones operativas.
 
 ---
 
-## Normativa aplicada
+## 🚀 Nuestro diferencial
 
-- **Decreto 674/89** — DBO₅ ≤ 50 mg/L · NH₄⁺ ≤ 35 mg/L · SST ≤ 35 mg/L
-- **Res. ADA PBA** — DBO₅ ≤ 45 mg/L · DQO ≤ 200 mg/L · pH 6.5–9.5
-- **Madoni Sludge Biotic Index (1994)** — interpretación de comunidad microbiana
-- **ISO 11348** — ensayo de inhibición de bioluminiscencia *Vibrio fischeri*
+Biovant integra evidencia científica consolidada que hoy se encuentra fragmentada. Combinamos:
+
+* monitoreo químico tradicional,
+* toxicidad mediante bioluminiscencia,
+* ecología microbiana del lodo activado,
+* análisis predictivo orientado a la toma de decisiones.
+
+Escuchamos a la biología antes de que falle.
+
+---
+
+## 🏭 Público objetivo
+
+Nuestro caso de uso inicial es la industria frigorífica, pero la solución fue diseñada para adaptarse a cualquier industria que opere sistemas biológicos de tratamiento de efluentes, como alimentos y bebidas, lácteos, papel, química y otras industrias de proceso.
+
+---
+
+## 🛠️ Tecnologías utilizadas
+
+* FastAPI
+* HTML, CSS y JavaScript
+* GitHub Pages
+* Render
+* Machine Learning
+* Visualización de datos
+* Monitoreo biológico predictivo
+
+
+## 👥 Equipo
+
+Somos un equipo interdisciplinario que combina tecnología, análisis de datos, ciberseguridad y legales-regulatorios, complementados con especialistas ambientales y expertos técnicos según el sector donde se implemente la solución.
+
+---
+
+## 📌 Proyecto desarrollado para la Y-Hat Hackathon
+
+Biovant busca cambiar el paradigma del tratamiento de efluentes industriales: pasar de reaccionar ante la contaminación a anticiparla utilizando la propia biología como sistema de alerta temprana.
