@@ -1,0 +1,1411 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Biovant — Plataforma de Inteligencia Biológica Predictiva</title>
+  <script crossorigin src="https://unpkg.com/react@18/umd/react.development.js"></script>
+  <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <style>
+    * { box-sizing: border-box; }
+    body { background: #f0f4f8; color: #0f172a; margin: 0;
+           font-family: system-ui, -apple-system, sans-serif; }
+    @keyframes pulse-glow { 0%,100%{opacity:1} 50%{opacity:.35} }
+    @keyframes spin { to{transform:rotate(360deg)} }
+    .pulse { animation: pulse-glow 2s ease-in-out infinite; }
+    .spin  { animation: spin 1s linear infinite; }
+    ::-webkit-scrollbar       { width: 5px; }
+    ::-webkit-scrollbar-track { background: #f1f5f9; }
+    ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 3px; }
+    .card { background: #ffffff; border: 1px solid #e2e8f0;
+            border-radius: 10px; transition: border-color .2s, box-shadow .2s;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.05); }
+    .card:hover { border-color: #cbd5e1; box-shadow: 0 2px 8px rgba(0,0,0,0.07); }
+  </style>
+</head>
+<body>
+<div id="root">
+  <div style="height:100vh;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:14px">
+    <div class="spin" style="width:36px;height:36px;border-radius:50%;border:3px solid #e2e8f0;border-top-color:#0891b2"></div>
+    <p style="color:#64748b;font-size:13px">Inicializando Biovant…</p>
+  </div>
+</div>
+
+<script type="text/babel" data-presets="env,react">
+var useState    = React.useState;
+var useEffect   = React.useEffect;
+var useCallback = React.useCallback;
+
+var API = 'http://localhost:8000';
+
+// ── Paleta ────────────────────────────────────────────────────────────────────
+var STATUS_COLOR = { green:'#10b981', yellow:'#f59e0b', red:'#ef4444' };
+var STATUS_LABEL = { green:'Operación Normal', yellow:'Biomasa Bajo Estrés', red:'Riesgo de Falla' };
+var STATUS_TEXT  = {
+  green:  'Biomasa estable, sin evidencias tempranas de deterioro. Todos los indicadores dentro de rango normal.',
+  yellow: 'Señales tempranas de deterioro biológico. Actividad microbiana reducida. Intervención recomendada.',
+  red:    'Riesgo crítico de colapso biológico. Múltiples indicadores fuera de rango. Acción inmediata requerida.',
+};
+
+var SCENARIOS_CFG = [
+  {id:'healthy',  label:'Operación Normal',    color:'#10b981'},
+  {id:'stressed', label:'Biomasa Bajo Estrés', color:'#f59e0b'},
+  {id:'critical', label:'Riesgo de Falla',     color:'#ef4444'},
+];
+
+var PRIORITY_CFG = {
+  info:     {bg:'#eff6ff', border:'#bfdbfe', text:'#1d4ed8', badge:'INFO'},
+  low:      {bg:'#f0fdf4', border:'#bbf7d0', text:'#166534', badge:'BAJO'},
+  medium:   {bg:'#fefce8', border:'#fde68a', text:'#92400e', badge:'MEDIO'},
+  high:     {bg:'#fff1f2', border:'#fecdd3', text:'#be123c', badge:'ALTO'},
+  critical: {bg:'#fef2f2', border:'#fecaca', text:'#991b1b', badge:'CRÍTICO'},
+};
+
+// ── Plant configuration — regulatory frameworks (configurable per plant) ──────
+var PLANT_CONFIG = {
+  plant_name:    'Frigorífico Norte S.A.',
+  jurisdiction:  'Partido de Tigre, Prov. Buenos Aires',
+  receiver:      'Colector cloacal — Red ADA',
+  config_date:   '06/06/2026',
+  regulations: [
+    {
+      id:'dto674', name:'Decreto Nacional 674/89', authority:'MADS Argentina', color:'#0369a1',
+      params:[
+        {label:'DBO₅', key:'dbo5_mgl',   limit:50,  unit:'mg/L', type:'max'},
+        {label:'NH₄⁺', key:'nh4_mgl',    limit:35,  unit:'mg/L', type:'max'},
+        {label:'SST',  key:'sst_est',     limit:35,  unit:'mg/L', type:'max', est:true},
+        {label:'pH',   key:'ph',          lo:6.5,    hi:10.0, unit:'', type:'range'},
+      ]
+    },
+    {
+      id:'ada', name:'Res. ADA — Prov. Buenos Aires', authority:'Autoridad del Agua PBA', color:'#0891b2',
+      params:[
+        {label:'DBO₅', key:'dbo5_mgl',   limit:45,  unit:'mg/L', type:'max'},
+        {label:'DQO',  key:'dqo_mgl',    limit:200, unit:'mg/L', type:'max'},
+        {label:'pH',   key:'ph',          lo:6.5,    hi:9.5, unit:'',   type:'range'},
+        {label:'Temp', key:'temperatura', limit:40,  unit:'°C',   type:'max'},
+      ]
+    },
+    {
+      id:'interno', name:'Límites internos del cliente', authority:'Frigorífico Norte S.A.', color:'#7c3aed',
+      params:[
+        {label:'DBO₅', key:'dbo5_mgl',   limit:40,  unit:'mg/L', type:'max'},
+        {label:'NH₄⁺', key:'nh4_mgl',    limit:28,  unit:'mg/L', type:'max'},
+      ]
+    },
+    {
+      id:'export', name:'Requisitos exportación — UE / Halal', authority:'Compradores internacionales', color:'#6d28d9',
+      params:[
+        {label:'DBO₅', key:'dbo5_mgl',   limit:35,  unit:'mg/L', type:'max'},
+        {label:'NH₄⁺', key:'nh4_mgl',    limit:25,  unit:'mg/L', type:'max'},
+        {label:'pH',   key:'ph',          lo:6.8,    hi:9.0, unit:'',   type:'range'},
+      ]
+    },
+  ]
+};
+
+// ── Plant historical patterns (per-plant learning from operational history) ───
+var PLANT_PATTERNS = {
+  observation_period: '12 meses',
+  total_events: 7,
+  event_def: [
+    'BHI < 50 durante 3 mediciones consecutivas',
+    'Riesgo predictivo (IA) > 70%',
+    'Inhibición Vibrio fischeri > 50%',
+    'Incumplimiento de parámetros Decreto 674/89',
+  ],
+  signals: [
+    {icon:'💧', signal:'OD por debajo del umbral (< 4 mg/L)',       pct:78, events:6},
+    {icon:'⚗️', signal:'NH₄⁺ elevado (> 25 mg/L)',                  pct:65, events:5},
+    {icon:'🧫', signal:'Toxicidad detectada — Vibrio (> 30%)',      pct:52, events:4},
+    {icon:'🌊', signal:'Sobrecarga de caudal (> 30 m³/h)',          pct:41, events:3},
+    {icon:'🔬', signal:'Actividad deshidrogenasa reducida (< 1.5 μg TTF/h)', pct:37, events:3},
+    {icon:'📊', signal:'DBO₅ elevada (> 80 mg/L)',                  pct:29, events:2},
+  ],
+};
+
+// ── Chart config ──────────────────────────────────────────────────────────────
+var MAIN_LINES = [
+  {key:'bhi',              label:'BHI',                 color:'#6366f1', w:2.5},
+  {key:'ecosentinel_score',label:'EcoSentinel',         color:'#0891b2', w:2.0},
+  {key:'vibrio_inhibition',label:'Vibrio Inhibición %', color:'#7c3aed', w:2.0},
+];
+
+var OPS_LINES = [
+  {key:'nh4',    label:'NH₄⁺ %',    color:'#ea580c', w:1.8},
+  {key:'do_sat', label:'OD %',      color:'#0284c7', w:1.8},
+  {key:'adh',    label:'ADH %',     color:'#16a34a', w:1.8},
+  {key:'tox_n',  label:'Toxicidad', color:'#e11d48', w:1.5},
+  {key:'ph_n',   label:'pH',        color:'#15803d', w:1.5},
+  {key:'temp_n', label:'Temp',      color:'#d97706', w:1.5},
+  {key:'dbo5_n', label:'DBO₅',      color:'#c2410c', w:1.5},
+  {key:'dqo_n',  label:'DQO',       color:'#7c3aed', w:1.5},
+  {key:'cau_n',  label:'Caudal',    color:'#0369a1', w:1.5},
+];
+
+// ── SVG chart geometry ────────────────────────────────────────────────────────
+var CW=720, CH=190, PL=36, PR=14, PT=12, PB=28;
+var PW=CW-PL-PR, PH=CH-PT-PB;
+
+function sx(i,n){ return PL+(n>1?(i/(n-1))*PW:PL); }
+function sy(v)  { var vv=Math.max(0,Math.min(100,v||0)); return PT+PH*(1-vv/100); }
+
+function linePath(data,key){
+  return data.map(function(d,i){
+    return (i===0?'M':'L')+sx(i,data.length).toFixed(1)+','+sy(d[key]||0).toFixed(1);
+  }).join(' ');
+}
+function areaPath(data,key){
+  if(!data.length) return '';
+  var n=data.length;
+  return linePath(data,key)+' L'+sx(n-1,n).toFixed(1)+','+(PT+PH)+' L'+sx(0,n).toFixed(1)+','+(PT+PH)+' Z';
+}
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
+function pad2(n){ return String(n).padStart(2,'0'); }
+function clamp(v,lo,hi){ return Math.max(lo,Math.min(hi,v)); }
+function calcBHI(a,d,n,t){ return Math.round(0.25*(a+d+(100-n)+(100-t))); }
+
+function processHistory(raw){
+  return (raw||[]).map(function(d){
+    return Object.assign({},d,{
+      tox_n:  d.toxicity||0,
+      ph_n:   Math.round(clamp((((d.ph||7)-4.5)/5)*100,0,100)),
+      temp_n: Math.round(clamp((((d.temperatura||22)-5)/40)*100,0,100)),
+      dbo5_n: Math.round(clamp((d.dbo5||0)/8,0,100)),
+      dqo_n:  Math.round(clamp((d.dqo||0)/20,0,100)),
+      cau_n:  Math.round(clamp(d.caudal||0,0,100)),
+    });
+  });
+}
+
+function fmtDate(d){ return pad2(d.getDate())+'/'+pad2(d.getMonth()+1)+'/'+d.getFullYear(); }
+
+function nextReviewInfo(score){
+  var days=score>=70?7:score>=45?3:1;
+  var d=new Date(); d.setDate(d.getDate()+days);
+  return {
+    days:days, date:fmtDate(d)+' — 14:00 hs',
+    label:days===7?'Revisar en 7 días':days===3?'Revisar en 72 horas':'Revisar en 24 horas',
+    priority:days<=1?'Alta':days<=3?'Media':'Baja',
+    color:days<=1?'#ef4444':days<=3?'#f59e0b':'#16a34a',
+  };
+}
+
+// ── Vibrio timing (batch assay schedule, not a live sensor) ──────────────────
+function getMockVibrioTiming(freqH){
+  freqH = freqH || 4;
+  var now = new Date();
+  var periodH = Math.floor(now.getHours() / freqH) * freqH;
+  var last = new Date(now);
+  last.setHours(periodH); last.setMinutes(15); last.setSeconds(0); last.setMilliseconds(0);
+  if (last > now) { last = new Date(last.getTime() - freqH * 3600000); }
+  var elapsed = Math.floor((now - last) / 60000);
+  var next = new Date(last.getTime() + freqH * 3600000);
+  var until = Math.max(0, Math.floor((next - now) / 60000));
+  var pct = elapsed / (freqH * 60);
+  var freshness = pct < 0.8 ? 'vigente' : (pct <= 1.0 ? 'pendiente' : 'vencido');
+  function fmtElapsed(m){ return m>=60 ? 'hace '+Math.floor(m/60)+'h '+pad2(m%60)+'min' : 'hace '+m+' min'; }
+  function fmtUntil(m){ return m>=60 ? 'en '+Math.floor(m/60)+'h '+pad2(m%60)+'min' : 'en '+m+' min'; }
+  return {
+    sample_time: pad2(last.getDate())+'/'+pad2(last.getMonth()+1)+'/'+last.getFullYear()+' — '+pad2(last.getHours())+':'+pad2(last.getMinutes())+' hs',
+    sample_elapsed: fmtElapsed(elapsed),
+    next_sample_time: pad2(next.getHours())+':'+pad2(next.getMinutes())+' hs',
+    next_sample_in: fmtUntil(until),
+    frequency: 'cada '+freqH+' horas',
+    freshness_status: freshness,
+  };
+}
+
+// ── Sensor value accessor (handles estimated fields) ─────────────────────────
+function getSensorVal(key, sen){
+  if(key==='sst_est') return Math.round((sen.dbo5_mgl||0)*0.42);
+  return sen[key]||0;
+}
+
+// ── Deterministic microscope particles (Madoni SBI proportions) ──────────────
+var MICRO = (function(){
+  function make(seed0,counts){
+    var seed=seed0;
+    function rng(){ seed=(seed*1664525+1013904223)&0x7fffffff; return seed/0x7fffffff; }
+    var TYPES=[
+      {t:'c',color:'#10b981',n:counts[0]},
+      {t:'f',color:'#f59e0b',n:counts[1]},
+      {t:'a',color:'#38bdf8',n:counts[2]},
+      {t:'l',color:'#ef4444',n:counts[3]},
+    ];
+    var pts=[];
+    TYPES.forEach(function(tp){
+      for(var i=0;i<tp.n;i++){
+        var angle=rng()*Math.PI*2, r=rng()*72;
+        pts.push({x:90+r*Math.cos(angle),y:90+r*Math.sin(angle),
+                  t:tp.t,color:tp.color,sz:rng()*3+2,rot:rng()*180});
+      }
+    });
+    return pts;
+  }
+  return {
+    healthy:  make(42,   [28,4,2,2]),
+    stressed: make(1337, [11,15,7,6]),
+    critical: make(9999, [3,21,7,13]),
+  };
+})();
+
+// ── Mock data ─────────────────────────────────────────────────────────────────
+var MOCK_BASE = {
+  healthy:  {adh:94,do_sat:91,nh4:7, tox:4, ph:7.15,temp:22.0,caudal:18.0,dbo5:32.0, dqo:53.0, dqo_r:1.65, nh4_phy:3.5},
+  stressed: {adh:61,do_sat:54,nh4:46,tox:31,ph:6.85,temp:22.0,caudal:32.0,dbo5:120.0,dqo:234.0,dqo_r:1.95, nh4_phy:52.0},
+  critical: {adh:37,do_sat:27,nh4:76,tox:66,ph:6.2, temp:22.0,caudal:52.0,dbo5:380.0,dqo:875.0,dqo_r:2.30, nh4_phy:130.0},
+};
+var MOCK_ECO = {
+  healthy: {
+    score:88,
+    ciliados:     {pct:58,status:'normal',  note:'Dominantes (adheridos + reptantes)'},
+    flagelados:   {pct:8, status:'normal',  note:'Nivel basal'},
+    amebas:       {pct:5, status:'normal',  note:'Normal'},
+    filamentosas: {pct:4, status:'normal',  note:'Sin riesgo de bulking'},
+    floculos:'compactos y bien estructurados',floculos_status:'normal',
+    interpretation:'Comunidad madura y estable, compatible con buena sedimentación y adecuada capacidad depuradora. Predominio de ciliados indicadores de lodo maduro.',
+  },
+  stressed: {
+    score:52,
+    ciliados:     {pct:28,status:'warning', note:'En descenso'},
+    flagelados:   {pct:38,status:'warning', note:'Elevado — perturbación'},
+    amebas:       {pct:18,status:'warning', note:'Elevado — estrés'},
+    filamentosas: {pct:14,status:'warning', note:'Riesgo inicial'},
+    floculos:'dispersos con fragmentación',floculos_status:'warning',
+    interpretation:'Compatible con cambios recientes de carga o perturbaciones operativas. El incremento de flagelados y amebas es indicador de deterioro de las condiciones aeróbicas.',
+  },
+  critical: {
+    score:22,
+    ciliados:     {pct:7, status:'critical',note:'Casi ausentes'},
+    flagelados:   {pct:48,status:'critical',note:'Dominantes — crisis'},
+    amebas:       {pct:16,status:'warning', note:'Elevado'},
+    filamentosas: {pct:30,status:'critical',note:'RIESGO DE BULKING'},
+    floculos:'muy dispersos y filamentosos',floculos_status:'critical',
+    interpretation:'Ecosistema alterado con riesgo de deterioro del tratamiento biológico y pérdida de eficiencia. Bacterias filamentosas dominantes con riesgo inminente de bulking.',
+  },
+};
+// Vibrio base values — NO jitter; values stable until next scheduled assay
+var MOCK_VIB_BASE = {
+  healthy:  {luminescence_pct:94,inhibition_pct:6, status:'normal',  interpretation:'Bioluminiscencia dentro de rangos normales. Sin compuestos inhibitorios significativos detectados.'},
+  stressed: {luminescence_pct:65,inhibition_pct:35,status:'warning', interpretation:'Disminución del 35% en bioluminiscencia. Posible ingreso de compuestos inhibitorios. Verificar fuentes de toxicidad en línea de producción.'},
+  critical: {luminescence_pct:32,inhibition_pct:68,status:'critical',interpretation:'Disminución severa del 68%. Alta carga tóxica confirmada por V. fischeri. Activar protocolo de emergencia y notificar responsable ambiental.'},
+};
+var MOCK_RECS = {
+  healthy: [
+    {priority:'info',  action:'Mantener configuración actual de aireación, caudal y carga orgánica', impact:'Eficiencia operativa óptima sostenida', timeframe:'Continuo', signal:'BHI'},
+    {priority:'info',  action:'EcoSentinel confirma comunidad estable — continuar monitoreo rutinario', impact:'Detección temprana de cambios en la comunidad microbiana', timeframe:'Diario', signal:'EcoSentinel'},
+    {priority:'low',   action:'Programar próxima calibración del sensor Vibrio Sentinel', impact:'Garantiza precisión en la detección de inhibición', timeframe:'En 3 días', signal:'Vibrio'},
+  ],
+  stressed: [
+    {priority:'high',   action:'Incrementar aireación 15–20% — EcoSentinel detecta flagelados elevados (38%). Verificar sopladores y difusores.', impact:'Recuperación de OD en 4–6 h; reduce formas libre-natantes', timeframe:'Inmediato', signal:'EcoSentinel + OD'},
+    {priority:'high',   action:'Monitorear NH₄⁺ cada 2 h — supera umbral regulatorio Decreto 674/89', impact:'Seguimiento de tendencia crítica; prevención de incumplimiento normativo', timeframe:'Próximas 12 h', signal:'NH₄⁺ / Normativa'},
+    {priority:'high',   action:'Vibrio Sentinel reporta 35% inhibición — revisar posibles ingresos de sanitizantes o detergentes en línea', impact:'Identifica compuestos inhibitorios antes del colapso biológico', timeframe:'Próximas 4 h', signal:'Vibrio'},
+    {priority:'medium', action:'Reducir carga orgánica 10% — flóculos dispersos confirman estrés estructural de la biomasa', impact:'Estabiliza estructura de flóculo y reduce estrés metabólico', timeframe:'Próximas 6 h', signal:'EcoSentinel'},
+    {priority:'low',    action:'Verificar y ajustar pH del reactor al rango óptimo (6.8–7.2)', impact:'Condiciones óptimas para actividad deshidrogenasa', timeframe:'Hoy', signal:'pH'},
+  ],
+  critical: [
+    {priority:'critical',action:'REDUCIR carga orgánica 30–40% YA — EcoSentinel: 30% filamentosas, riesgo de bulking inminente', impact:'Previene colapso biológico total y pérdida masiva de biomasa', timeframe:'INMEDIATO', signal:'EcoSentinel'},
+    {priority:'critical',action:'Vibrio: 68% inhibición — activar pretratamiento de emergencia. Revisar ingresos de sanitizantes, detergentes o ácidos en la línea.', impact:'Reduce toxicidad antes del colapso definitivo de la biomasa activa', timeframe:'INMEDIATO', signal:'Vibrio'},
+    {priority:'high',    action:'Incrementar aireación al máximo — revisar sopladores y difusores. OD crítico (0.9 mg/L), ciliados casi ausentes (7%).', impact:'Recuperación de OD; favorece supervivencia de ciliados beneficiosos', timeframe:'Inmediato', signal:'OD + EcoSentinel'},
+    {priority:'high',    action:'Notificar responsable ambiental — NH₄⁺ supera límite Decreto 674/89 (35 mg/L). Aumentar recirculación de lodos.', impact:'Gestión regulatoria preventiva; documentación de emergencia', timeframe:'Próxima hora', signal:'Normativa'},
+    {priority:'medium',  action:'Preparar evidencia regulatoria y plan de contingencia (Decreto 674/89 y ADA PBA)', impact:'Reduce riesgo de sanción administrativa y clausura operativa', timeframe:'Próximas 4 h', signal:'Cumplimiento'},
+  ],
+};
+
+function buildMock(sc){
+  var cfg=MOCK_BASE[sc]||MOCK_BASE.healthy;
+  var eco=MOCK_ECO[sc]||MOCK_ECO.healthy;
+  var vibBase=MOCK_VIB_BASE[sc]||MOCK_VIB_BASE.healthy;
+  var vibTiming=getMockVibrioTiming(4);
+  var scCfg=SCENARIOS_CFG.find(function(x){return x.id===sc;})||{};
+  var bhi=calcBHI(cfg.adh,cfg.do_sat,cfg.nh4,cfg.tox);
+  var now=new Date();
+  var h=MOCK_BASE.healthy;
+
+  var history=Array.from({length:24},function(_,i){
+    var p=i/23;
+    function lp(s,e,fz){ return Math.round(clamp(s+(e-s)*p+(Math.random()-.5)*(fz||2),0,100)); }
+    var adh=lp(h.adh,cfg.adh,3), ds=lp(h.do_sat,cfg.do_sat,3);
+    var nh4=lp(h.nh4,cfg.nh4,2), tox=lp(h.tox,cfg.tox,2);
+    var bv=calcBHI(adh,ds,nh4,tox);
+    var eco_v=lp(88,eco.score,3);
+    var vib_v=lp(6,vibBase.inhibition_pct,2);
+    var ph_v=+(h.ph+(cfg.ph-h.ph)*p+(Math.random()-.5)*.08).toFixed(2);
+    var temp_v=+(22+(cfg.temp-22)*p+(Math.random()-.5)*.4).toFixed(1);
+    var dbo5_v=Math.round(h.dbo5+(cfg.dbo5-h.dbo5)*p);
+    var dqo_v=Math.round(dbo5_v*cfg.dqo_r);
+    var cau_v=+(h.caudal+(cfg.caudal-h.caudal)*p).toFixed(1);
+    var t=new Date(now.getTime()-(23-i)*3600000);
+    return {
+      time:pad2(t.getHours())+':'+pad2(t.getMinutes()),
+      bhi:bv,ecosentinel_score:eco_v,adh:adh,do_sat:ds,
+      nh4:nh4,toxicity:tox,compliance_risk:bv>=75?8:bv>=50?42:78,
+      vibrio_inhibition:vib_v,ph:ph_v,temperatura:temp_v,
+      dbo5:dbo5_v,dqo:dqo_v,caudal:cau_v,
+    };
+  });
+
+  return {
+    current:{
+      bhi:bhi,status:bhi>=75?'green':bhi>=50?'yellow':'red',
+      scenario:sc,scenario_name:scCfg.label||sc,
+      compliance_risk:bhi>=75?8:bhi>=50?42:78,
+      sensors:{
+        adh:cfg.adh,do_sat:cfg.do_sat,nh4:cfg.nh4,toxicity:cfg.tox,
+        adh_unit:(cfg.adh*.052).toFixed(2),adh_unit_label:'μg TTF/h',
+        do_mgl:(cfg.do_sat*.092).toFixed(2),
+        nh4_mgl: cfg.nh4_phy,
+        ph:cfg.ph,temperatura:cfg.temp,dbo5_mgl:cfg.dbo5,
+        dqo_mgl:cfg.dqo,caudal_m3h:cfg.caudal,
+        trends:{adh:sc==='healthy'?'stable':'down',od:sc==='healthy'?'stable':'down',
+                nh4:sc==='healthy'?'stable':'up',tox:sc==='healthy'?'stable':'up',
+                ph:sc==='healthy'?'stable':'down',temp:'stable',
+                dbo5:sc==='healthy'?'stable':'up',dqo:sc==='healthy'?'stable':'up',
+                caudal:sc==='healthy'?'stable':'up'},
+      },
+      ecosentinel:eco,
+      vibrio:Object.assign({},vibBase,vibTiming),
+      recommendations:MOCK_RECS[sc]||[],
+    },
+    history:history,
+  };
+}
+
+function buildMockAI(sc){
+  var r={healthy:12,stressed:57,critical:89}[sc]||12;
+  return {
+    ai_ready:false,risk_pct:r,prediction:r>=50?'non_compliant':'compliant',
+    model_metrics:{accuracy:.939,recall:.900},
+  };
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// COMPONENTS
+// ══════════════════════════════════════════════════════════════════════════════
+
+// ── Collapsible Section ───────────────────────────────────────────────────────
+function Collapsible(props){
+  var _c=useState(false);
+  var collapsed=_c[0];
+  function toggle(){ _c[1](function(v){ return !v; }); }
+  return (
+    <div style={{marginBottom:2}}>
+      <div style={{display:'flex',alignItems:'center',gap:10,margin:'14px 0 8px',
+                   cursor:'pointer',userSelect:'none'}}
+           onClick={toggle}>
+        <div style={{background:'#ede9fe',border:'1px solid #8b5cf6',color:'#6d28d9',
+                     borderRadius:4,padding:'2px 9px',fontSize:9.5,fontWeight:700,
+                     letterSpacing:'.1em',textTransform:'uppercase',flexShrink:0}}>
+          {props.num}
+        </div>
+        <span style={{color:'#475569',fontSize:11.5,fontWeight:500,flex:1}}>{props.title}</span>
+        <div style={{flex:2,height:1,background:'#e2e8f0'}}/>
+        <span style={{color:'#94a3b8',fontSize:13,flexShrink:0,display:'inline-block',width:16,
+                      textAlign:'center',
+                      transform:collapsed?'rotate(-90deg)':'rotate(0deg)',
+                      transition:'transform 0.2s ease'}}>▾</span>
+      </div>
+      <div style={{
+        overflow:collapsed?'hidden':'visible',
+        maxHeight:collapsed?'0px':'9000px',
+        opacity:collapsed?0:1,
+        transition:'max-height 0.35s ease, opacity 0.2s ease',
+        paddingBottom:collapsed?0:2,
+      }}>
+        {props.children}
+      </div>
+    </div>
+  );
+}
+
+// ── BHI Gauge ─────────────────────────────────────────────────────────────────
+function BHIGauge(props){
+  var v=props.value||0, st=props.status||'green';
+  var col=STATUS_COLOR[st]||'#6366f1';
+  var r=64, cx=96, cy=96;
+  function pt(deg){ var rad=deg*Math.PI/180; return [cx+r*Math.cos(rad),cy-r*Math.sin(rad)]; }
+  function arc(a1,a2){
+    var p1=pt(a1),p2=pt(a2),lg=a1-a2>180?1:0;
+    return 'M'+p1[0].toFixed(1)+' '+p1[1].toFixed(1)+' A '+r+' '+r+' 0 '+lg+' 1 '+p2[0].toFixed(1)+' '+p2[1].toFixed(1);
+  }
+  var vAngle=Math.max(1,180-v*1.8);
+  var tip=pt(vAngle);
+  return (
+    <svg viewBox="0 0 192 110" style={{width:'100%',maxWidth:192,display:'block',margin:'0 auto'}}>
+      <path d={arc(180,120)} fill="none" stroke="#fee2e2" strokeWidth="11" strokeLinecap="round"/>
+      <path d={arc(120,60)}  fill="none" stroke="#fef3c7" strokeWidth="11" strokeLinecap="round"/>
+      <path d={arc(60,0)}    fill="none" stroke="#d1fae5" strokeWidth="11" strokeLinecap="round"/>
+      {v>0&&<path d={arc(180,vAngle)} fill="none" stroke={col} strokeWidth="11" strokeLinecap="round" style={{filter:'drop-shadow(0 0 4px '+col+'60)'}}/>}
+      <line x1={cx} y1={cy} x2={tip[0].toFixed(1)} y2={tip[1].toFixed(1)} stroke={col} strokeWidth="2.5" strokeLinecap="round"/>
+      <circle cx={cx} cy={cy} r="5" fill={col}/>
+      <text x={cx} y={cy+8}  fill="#0f172a" textAnchor="middle" fontSize="26" fontWeight="800" fontFamily="system-ui">{v}</text>
+      <text x={cx} y={cy+20} fill="#94a3b8" textAnchor="middle" fontSize="8" letterSpacing="2" fontFamily="system-ui">BHI / 100</text>
+      <text x="16"  y="108" fill="#94a3b8" textAnchor="middle" fontSize="8">0</text>
+      <text x="176" y="108" fill="#94a3b8" textAnchor="middle" fontSize="8">100</text>
+    </svg>
+  );
+}
+
+// ── Traffic Light ─────────────────────────────────────────────────────────────
+function TrafficLight(props){
+  var st=props.status;
+  return (
+    <div style={{display:'flex',gap:8,justifyContent:'center'}}>
+      {[{id:'red',c:'#ef4444'},{id:'yellow',c:'#f59e0b'},{id:'green',c:'#10b981'}].map(function(l){
+        var on=st===l.id;
+        return <div key={l.id} style={{width:14,height:14,borderRadius:'50%',
+                 backgroundColor:on?l.c:'#e5e7eb',
+                 boxShadow:on?'0 0 10px '+l.c:undefined,transition:'all .3s'}}/>;
+      })}
+    </div>
+  );
+}
+
+// ── Sensor Mini Card ──────────────────────────────────────────────────────────
+function SensorMini(props){
+  var sc=props.ok==='good'?'#10b981':props.ok==='warn'?'#f59e0b':'#ef4444';
+  var trend=props.trend||'stable';
+  var tMap={up:'↑',down:'↓',stable:'→'};
+  var tCol={up:props.inv?'#ef4444':'#10b981',down:props.inv?'#10b981':'#ef4444',stable:'#94a3b8'};
+  return (
+    <div className="card" style={{padding:'9px 12px'}}>
+      <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:3}}>
+        <span style={{fontSize:9,color:'#64748b',textTransform:'uppercase',letterSpacing:'.05em'}}>{props.label}</span>
+        {props.est&&<span style={{fontSize:7.5,color:'#94a3b8',border:'1px solid #e2e8f0',borderRadius:2,padding:'0 3px'}}>est.</span>}
+      </div>
+      <div style={{display:'flex',alignItems:'baseline',gap:4}}>
+        <span style={{fontSize:18,fontWeight:700,color:sc,lineHeight:1}}>{props.val}</span>
+        <span style={{fontSize:9.5,color:'#94a3b8'}}>{props.unit}</span>
+        <span style={{fontSize:12,color:tCol[trend],marginLeft:'auto',fontWeight:600}}>{tMap[trend]}</span>
+      </div>
+      <div style={{height:3,borderRadius:99,background:'#f1f5f9',marginTop:5,overflow:'hidden'}}>
+        <div style={{height:3,borderRadius:99,background:sc,width:clamp(props.pct||0,0,100)+'%',transition:'width .6s'}}/>
+      </div>
+    </div>
+  );
+}
+
+// ── Microscope SVG View ───────────────────────────────────────────────────────
+function MicroscopeView(props){
+  var pts=MICRO[props.scenario]||MICRO.healthy;
+  return (
+    <svg viewBox="0 0 180 180" style={{width:'100%',height:'100%',display:'block'}}>
+      <defs><clipPath id="fieldClip"><circle cx="90" cy="90" r="83"/></clipPath></defs>
+      <circle cx="90" cy="90" r="84" fill="#030710" stroke="#1e2d40" strokeWidth="1.5"/>
+      <g clipPath="url(#fieldClip)" opacity=".2">
+        <line x1="90" y1="7" x2="90" y2="173" stroke="#1e3a5f" strokeWidth=".6"/>
+        <line x1="7" y1="90" x2="173" y2="90" stroke="#1e3a5f" strokeWidth=".6"/>
+        <circle cx="90" cy="90" r="28" fill="none" stroke="#1e3a5f" strokeWidth=".5"/>
+        <circle cx="90" cy="90" r="56" fill="none" stroke="#1e3a5f" strokeWidth=".5"/>
+      </g>
+      <g clipPath="url(#fieldClip)">
+        {pts.map(function(p,i){
+          var x=p.x.toFixed(1),y=p.y.toFixed(1),tr='rotate('+p.rot+','+x+','+y+')';
+          if(p.t==='c') return <ellipse key={i} cx={x} cy={y} rx={(p.sz*1.3).toFixed(1)} ry={(p.sz*.75).toFixed(1)} fill={p.color} opacity=".85" transform={tr}/>;
+          if(p.t==='f') return <g key={i}><circle cx={x} cy={y} r={(p.sz*.9).toFixed(1)} fill={p.color} opacity=".8"/><line x1={x} y1={(+y+p.sz).toFixed(1)} x2={x} y2={(+y+p.sz*3.5).toFixed(1)} stroke={p.color} strokeWidth=".8" opacity=".6"/></g>;
+          if(p.t==='a') return <ellipse key={i} cx={x} cy={y} rx={(p.sz*1.5).toFixed(1)} ry={p.sz.toFixed(1)} fill={p.color} opacity=".5" transform={tr}/>;
+          return <rect key={i} x={(+x-p.sz*3.5).toFixed(1)} y={(+y-.7).toFixed(1)} width={(p.sz*7).toFixed(1)} height="1.4" fill={p.color} opacity=".8" transform={tr}/>;
+        })}
+      </g>
+      <line x1="108" y1="153" x2="150" y2="153" stroke="#4b5563" strokeWidth="1.5"/>
+      <line x1="108" y1="149" x2="108" y2="157" stroke="#4b5563" strokeWidth="1.5"/>
+      <line x1="150" y1="149" x2="150" y2="157" stroke="#4b5563" strokeWidth="1.5"/>
+      <text x="129" y="164" fill="#4b5563" textAnchor="middle" fontSize="8" fontFamily="monospace">50μm</text>
+      {[{c:'#10b981',l:'Ciliados'},{c:'#f59e0b',l:'Flagelados'},{c:'#38bdf8',l:'Amebas'},{c:'#ef4444',l:'Filamentosas'}].map(function(lg,i){
+        return <g key={i} transform={'translate(6,'+(12+i*13)+')'}>
+          <rect x="0" y="-6" width="8" height="7" rx="1" fill={lg.c} opacity=".8"/>
+          <text x="11" y="0" fill="#9ca3af" fontSize="7" fontFamily="system-ui">{lg.l}</text>
+        </g>;
+      })}
+    </svg>
+  );
+}
+
+// ── EcoSentinel Score Ring ────────────────────────────────────────────────────
+function EcoRing(props){
+  var s=props.score||0;
+  var col=s>=70?'#0891b2':s>=45?'#d97706':'#dc2626';
+  var r=28, c=2*Math.PI*r;
+  return (
+    <div style={{position:'relative',width:68,height:68,flexShrink:0}}>
+      <svg viewBox="0 0 68 68" style={{width:68,height:68,transform:'rotate(-90deg)'}}>
+        <circle cx="34" cy="34" r={r} fill="none" stroke="#f1f5f9" strokeWidth="7"/>
+        <circle cx="34" cy="34" r={r} fill="none" stroke={col} strokeWidth="7"
+          strokeDasharray={(c*s/100)+' '+c} strokeLinecap="round"
+          style={{transition:'stroke-dasharray .6s'}}/>
+      </svg>
+      <div style={{position:'absolute',inset:0,display:'flex',flexDirection:'column',
+                   alignItems:'center',justifyContent:'center'}}>
+        <span style={{fontSize:15,fontWeight:700,color:col,lineHeight:1}}>{s}</span>
+        <span style={{fontSize:6.5,color:'#94a3b8',letterSpacing:'1px'}}>SCORE</span>
+      </div>
+    </div>
+  );
+}
+
+// ── EcoSentinel Card ──────────────────────────────────────────────────────────
+function EcoSentinelCard(props){
+  var ec=props.data, scenario=props.scenario;
+  if(!ec) return null;
+  var SC={normal:'#10b981',warning:'#f59e0b',critical:'#ef4444'};
+  var floCol=SC[ec.floculos_status]||'#64748b';
+  var nr=nextReviewInfo(ec.score);
+  var capMeta={date:'06/06/2026 — 10:45 hs',user:'Ing. M. García',reactor:'Reactor 2 — EDAR Norte'};
+  return (
+    <div className="card" style={{padding:16,display:'flex',flexDirection:'column',gap:10}}>
+      <div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}>
+        <div style={{display:'flex',alignItems:'center',gap:7}}>
+          <div style={{width:7,height:7,borderRadius:'50%',background:'#0891b2'}} className="pulse"/>
+          <span style={{fontSize:13,fontWeight:700,color:'#0891b2',letterSpacing:'.03em'}}>EcoSentinel™</span>
+          <span style={{fontSize:9.5,color:'#94a3b8'}}>Microscopio Digital</span>
+        </div>
+        <div style={{fontSize:9.5,padding:'2px 8px',borderRadius:4,fontWeight:700,
+                     background:floCol+'18',color:floCol,border:'1px solid '+floCol+'40'}}>
+          {ec.floculos_status==='normal'?'BIOMASA ESTABLE':ec.floculos_status==='warning'?'BAJO ESTRÉS':'RIESGO DE FALLA'}
+        </div>
+      </div>
+      <div style={{display:'grid',gridTemplateColumns:'155px 1fr',gap:10}}>
+        <div style={{borderRadius:8,overflow:'hidden',border:'1px solid #e2e8f0',background:'#030710',height:155}}>
+          <MicroscopeView scenario={scenario}/>
+        </div>
+        <div style={{display:'flex',flexDirection:'column',gap:7}}>
+          <div style={{padding:'8px 10px',borderRadius:6,background:'#f8fafc',border:'1px solid #e2e8f0'}}>
+            <div style={{fontSize:8.5,color:'#94a3b8',fontWeight:700,textTransform:'uppercase',letterSpacing:'.06em',marginBottom:5}}>Última Captura</div>
+            {[['Fecha',capMeta.date],['Responsable',capMeta.user],['Reactor',capMeta.reactor]].map(function(r){
+              return <div key={r[0]} style={{display:'flex',justifyContent:'space-between',marginBottom:3}}>
+                <span style={{fontSize:10,color:'#64748b'}}>{r[0]}</span>
+                <span style={{fontSize:10,color:'#475569',fontWeight:500}}>{r[1]}</span>
+              </div>;
+            })}
+          </div>
+          <div style={{display:'flex',gap:9,alignItems:'center'}}>
+            <EcoRing score={ec.score}/>
+            <div style={{fontSize:10.5,color:'#475569',lineHeight:1.55,flex:1}}>{ec.interpretation}</div>
+          </div>
+        </div>
+      </div>
+      <div>
+        <div style={{fontSize:8.5,fontWeight:700,color:'#64748b',textTransform:'uppercase',letterSpacing:'.06em',marginBottom:5}}>Comunidad Microbiana</div>
+        <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:'4px 12px'}}>
+          {[{k:'ciliados',l:'Ciliados'},{k:'flagelados',l:'Flagelados'},{k:'amebas',l:'Amebas'},{k:'filamentosas',l:'Filamentosas'}].map(function(org){
+            var d=ec[org.k]; if(!d) return null;
+            var col=SC[d.status]||'#64748b';
+            return <div key={org.k} style={{display:'grid',gridTemplateColumns:'70px 1fr 28px',alignItems:'center',gap:5}}>
+              <span style={{fontSize:10,color:'#64748b'}}>{org.l}</span>
+              <div style={{height:4,borderRadius:2,background:'#f1f5f9',overflow:'hidden'}}>
+                <div style={{height:'100%',background:col,width:d.pct+'%',transition:'width .6s'}}/>
+              </div>
+              <span style={{fontSize:10,color:col,fontWeight:600,textAlign:'right'}}>{d.pct}%</span>
+            </div>;
+          })}
+        </div>
+        <div style={{display:'flex',alignItems:'center',gap:6,marginTop:5,padding:'4px 8px',borderRadius:5,background:'#f8fafc',border:'1px solid #e2e8f0'}}>
+          <span style={{fontSize:9.5,color:'#64748b'}}>Flóculos:</span>
+          <span style={{fontSize:10,fontWeight:600,color:floCol,textTransform:'uppercase'}}>{ec.floculos}</span>
+        </div>
+      </div>
+      <div style={{padding:'9px 12px',borderRadius:6,background:nr.color+'0c',border:'1px solid '+nr.color+'30'}}>
+        <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:3}}>
+          <span style={{fontSize:11,color:nr.color,fontWeight:600}}>🔔 {nr.label}</span>
+          <span style={{fontSize:9,padding:'1px 7px',borderRadius:3,background:nr.color+'15',color:nr.color,fontWeight:700}}>{nr.priority} prioridad</span>
+        </div>
+        <div style={{fontSize:10,color:'#64748b'}}>Próxima revisión: <strong style={{color:'#475569'}}>{nr.date}</strong></div>
+      </div>
+    </div>
+  );
+}
+
+// ── Vibrio Sentinel Card — batch assay, NOT a live sensor ─────────────────────
+function VibrioCard(props){
+  var vib=props.data;
+  if(!vib) return null;
+  var measCol={normal:'#7c3aed',warning:'#d97706',critical:'#dc2626'}[vib.status]||'#7c3aed';
+  var measLabel={normal:'NORMAL',warning:'ALERTA MODERADA',critical:'TOXICIDAD ALTA'}[vib.status]||'—';
+  var inh=vib.inhibition_pct||0, lum=vib.luminescence_pct||0;
+  var toxLabel=inh<20?'Sin toxicidad relevante':inh<50?'Toxicidad moderada detectada':'Toxicidad alta confirmada';
+  var r=38, cx=50, cy=50, circ=2*Math.PI*r;
+
+  var freshness=vib.freshness_status||'vigente';
+  var freshCol={vigente:'#10b981',pendiente:'#f59e0b',vencido:'#ef4444'}[freshness];
+  var freshBg={vigente:'#f0fdf4',pendiente:'#fffbeb',vencido:'#fef2f2'}[freshness];
+  var freshBorder={vigente:'#bbf7d0',pendiente:'#fde68a',vencido:'#fecaca'}[freshness];
+  var freshLabel={vigente:'🟢 ENSAYO VIGENTE',pendiente:'🟡 PRÓXIMA MUESTRA PENDIENTE',vencido:'🔴 ENSAYO VENCIDO'}[freshness];
+
+  return (
+    <div className="card" style={{padding:16,display:'flex',flexDirection:'column',gap:10}}>
+      {/* Header */}
+      <div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}>
+        <div style={{display:'flex',alignItems:'center',gap:7}}>
+          <div style={{width:7,height:7,borderRadius:'50%',background:'#7c3aed'}} className="pulse"/>
+          <span style={{fontSize:13,fontWeight:700,color:'#7c3aed',letterSpacing:'.03em'}}>Vibrio Sentinel™</span>
+          <span style={{fontSize:9.5,color:'#94a3b8'}}>V. fischeri · ISO 11348</span>
+        </div>
+        <div style={{fontSize:9.5,padding:'3px 10px',borderRadius:5,fontWeight:700,
+                     background:freshBg,color:freshCol,border:'1px solid '+freshBorder}}>
+          {freshLabel}
+        </div>
+      </div>
+
+      {/* Note: this is a batch assay */}
+      <div style={{padding:'5px 10px',borderRadius:5,background:'#f8fafc',border:'1px solid #e2e8f0',
+                   display:'flex',alignItems:'center',gap:6}}>
+        <span style={{fontSize:10,color:'#94a3b8'}}>📋</span>
+        <span style={{fontSize:9.5,color:'#64748b',lineHeight:1.4}}>
+          Ensayo de toxicidad por bioluminiscencia. El resultado es estático entre muestras programadas y no se actualiza en tiempo real.
+        </span>
+      </div>
+
+      {/* Result + Schedule */}
+      <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10}}>
+        {/* Left: measurement result */}
+        <div style={{display:'flex',flexDirection:'column',gap:8}}>
+          <div style={{fontSize:9,fontWeight:700,textTransform:'uppercase',letterSpacing:'.07em',color:'#64748b'}}>
+            Resultado del Ensayo
+          </div>
+          <div style={{display:'flex',alignItems:'center',gap:10}}>
+            <div style={{position:'relative',width:100,height:100,flexShrink:0}}>
+              <svg viewBox="0 0 100 100" style={{width:100,height:100,transform:'rotate(-90deg)'}}>
+                <circle cx={cx} cy={cy} r={r} fill="none" stroke="#f1f5f9" strokeWidth="8"/>
+                <circle cx={cx} cy={cy} r={r} fill="none" stroke={measCol} strokeWidth="8"
+                  strokeDasharray={(circ*inh/100)+' '+circ} strokeLinecap="round"
+                  style={{transition:'stroke-dasharray .7s'}}/>
+              </svg>
+              <div style={{position:'absolute',inset:0,display:'flex',flexDirection:'column',
+                           alignItems:'center',justifyContent:'center'}}>
+                <span style={{fontSize:20,fontWeight:800,color:measCol,lineHeight:1}}>{inh}%</span>
+                <span style={{fontSize:8,color:'#94a3b8',marginTop:1}}>Inhibición</span>
+              </div>
+            </div>
+            <div style={{flex:1}}>
+              <div style={{fontSize:11,fontWeight:700,color:measCol,marginBottom:4}}>{toxLabel}</div>
+              <div style={{fontSize:9.5,color:'#64748b',marginBottom:5}}>
+                Bioluminiscencia: <strong style={{color:measCol}}>{lum}%</strong>
+              </div>
+              <div style={{height:4,borderRadius:2,background:'#f1f5f9',overflow:'hidden'}}>
+                <div style={{height:'100%',background:measCol,width:lum+'%',transition:'width .7s'}}/>
+              </div>
+              <div style={{marginTop:5,padding:'2px 7px',borderRadius:3,display:'inline-block',
+                           background:measCol+'12',border:'1px solid '+measCol+'30',
+                           fontSize:9,fontWeight:700,color:measCol}}>{measLabel}</div>
+            </div>
+          </div>
+        </div>
+
+        {/* Right: schedule metadata */}
+        <div style={{display:'flex',flexDirection:'column',gap:0}}>
+          <div style={{fontSize:9,fontWeight:700,textTransform:'uppercase',letterSpacing:'.07em',
+                       color:'#64748b',marginBottom:7}}>Cronograma del Ensayo</div>
+          {[
+            ['Última muestra',    vib.sample_time||'—',     '#475569'],
+            ['Tiempo transcurrido',vib.sample_elapsed||'—', freshCol],
+            ['Próxima muestra',   vib.next_sample_time||'—',freshness==='pendiente'?freshCol:'#475569'],
+            ['Próxima en',        vib.next_sample_in||'—',  freshness==='pendiente'?freshCol:'#64748b'],
+            ['Frecuencia',        vib.frequency||'cada 4 horas','#64748b'],
+          ].map(function(row){
+            return (
+              <div key={row[0]} style={{display:'flex',justifyContent:'space-between',
+                                        alignItems:'baseline',padding:'4px 0',
+                                        borderBottom:'1px solid #f1f5f9'}}>
+                <span style={{fontSize:9.5,color:'#94a3b8'}}>{row[0]}</span>
+                <span style={{fontSize:10,color:row[2],fontWeight:600}}>{row[1]}</span>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* Interpretation */}
+      <div style={{padding:'10px 12px',borderRadius:6,background:measCol+'0c',border:'1px solid '+measCol+'25'}}>
+        <div style={{fontSize:8.5,fontWeight:700,color:measCol,textTransform:'uppercase',letterSpacing:'.05em',marginBottom:4}}>Interpretación automática</div>
+        <div style={{fontSize:11,color:'#475569',lineHeight:1.6}}>{vib.interpretation}</div>
+      </div>
+    </div>
+  );
+}
+
+// ── SVG Chart ─────────────────────────────────────────────────────────────────
+function SVGChart(props){
+  var data=props.data||[], lines=props.lines||[];
+  var active=props.active||[], toggle=props.toggle;
+  var _h=useState(null); var hIdx=_h[0],setHIdx=_h[1];
+  var n=data.length;
+  var actLines=lines.filter(function(l){return active.indexOf(l.key)>=0;});
+  var GRID=[0,25,50,75,100];
+  var tickEvery=Math.max(1,Math.floor(n/6));
+  var tipPct=n>1?(PL+(hIdx/(n-1))*PW)/CW*100:50;
+  var flipLeft=tipPct>60;
+  return (
+    <div>
+      {toggle&&(
+        <div style={{display:'flex',flexWrap:'wrap',gap:4,marginBottom:8}}>
+          {lines.map(function(l){
+            var on=active.indexOf(l.key)>=0;
+            return <button key={l.key} onClick={function(){toggle(l.key);}}
+              style={{fontSize:10,padding:'2px 7px',borderRadius:4,cursor:'pointer',
+                      fontWeight:500,fontFamily:'system-ui',transition:'all .15s',
+                      background:on?l.color+'15':'transparent',color:on?l.color:'#64748b',
+                      border:'1px solid '+(on?l.color+'45':'#e2e8f0')}}>
+              {l.label}
+            </button>;
+          })}
+        </div>
+      )}
+      <div style={{position:'relative'}}>
+        <svg viewBox={'0 0 '+CW+' '+CH} style={{width:'100%',display:'block',overflow:'visible'}}
+             onMouseMove={n>0?function(e){
+               var rect=e.currentTarget.getBoundingClientRect();
+               var tx=((e.clientX-rect.left)/rect.width*CW-PL)/PW;
+               setHIdx(Math.max(0,Math.min(n-1,Math.round(tx*(n-1)))));
+             }:null}
+             onMouseLeave={function(){setHIdx(null);}}>
+          {GRID.map(function(v){
+            return <g key={v}>
+              <line x1={PL} y1={sy(v)} x2={CW-PR} y2={sy(v)} stroke="#e2e8f0" strokeWidth="1"/>
+              <text x={PL-5} y={sy(v)+4} textAnchor="end" fill="#94a3b8" fontSize="10" fontFamily="system-ui">{v}</text>
+            </g>;
+          })}
+          {actLines.map(function(l){ return <path key={'a'+l.key} d={areaPath(data,l.key)} fill={l.color} fillOpacity=".07" stroke="none"/>; })}
+          {actLines.map(function(l){ return <path key={'l'+l.key} d={linePath(data,l.key)} fill="none" stroke={l.color} strokeWidth={l.w||1.8} strokeLinejoin="round" strokeLinecap="round"/>; })}
+          {data.map(function(d,i){
+            if(i%tickEvery!==0&&i!==n-1) return null;
+            return <text key={i} x={sx(i,n)} y={CH-PB+15} textAnchor="middle" fill="#94a3b8" fontSize="9.5" fontFamily="system-ui">{d.time}</text>;
+          })}
+          {hIdx!==null&&n>0&&(
+            <g>
+              <line x1={sx(hIdx,n)} y1={PT} x2={sx(hIdx,n)} y2={PT+PH} stroke="#cbd5e1" strokeWidth="1" strokeDasharray="3,3"/>
+              {actLines.map(function(l){
+                var d=data[hIdx]; if(!d||d[l.key]==null) return null;
+                return <circle key={'d'+l.key} cx={sx(hIdx,n)} cy={sy(d[l.key])} r="3.5" fill={l.color} stroke="#ffffff" strokeWidth="2"/>;
+              })}
+            </g>
+          )}
+        </svg>
+        {hIdx!==null&&data[hIdx]&&(function(){
+          var d=data[hIdx];
+          return (
+            <div style={{position:'absolute',top:4,zIndex:20,pointerEvents:'none',
+                         left:tipPct+'%',
+                         transform:flipLeft?'translateX(-100%) translateX(-8px)':'translateX(8px)',
+                         background:'#ffffff',border:'1px solid #e2e8f0',
+                         borderRadius:8,padding:'8px 12px',minWidth:130,
+                         boxShadow:'0 4px 12px rgba(0,0,0,0.08)'}}>
+              <div style={{fontSize:10,color:'#64748b',fontWeight:600,marginBottom:5}}>{d.time}</div>
+              {actLines.map(function(l){
+                return <div key={l.key} style={{display:'flex',alignItems:'center',gap:6,marginBottom:3}}>
+                  <div style={{width:6,height:6,borderRadius:'50%',background:l.color}}/>
+                  <span style={{fontSize:10,color:'#475569'}}>{l.label}:</span>
+                  <strong style={{fontSize:10,color:l.color}}>{d[l.key]}</strong>
+                </div>;
+              })}
+            </div>
+          );
+        })()}
+      </div>
+    </div>
+  );
+}
+
+// ── Configured Compliance Card (multi-framework, per-plant) ───────────────────
+function ConfiguredComplianceCard(props){
+  var sen=props.sensors||{};
+
+  function checkParam(p){
+    var val=getSensorVal(p.key,sen);
+    var ok=p.type==='max'?val<=p.limit:(val>=p.lo&&val<=p.hi);
+    var limitStr=p.type==='max'?('≤ '+p.limit+' '+p.unit):(p.lo+'–'+p.hi+(p.unit?' '+p.unit:''));
+    var valFmt=Number.isInteger(val)?val:parseFloat(val.toFixed(1));
+    return Object.assign({},p,{val:valFmt,ok:ok,limitStr:limitStr});
+  }
+
+  var frameworks=PLANT_CONFIG.regulations.map(function(reg){
+    var params=reg.params.map(checkParam);
+    var nPass=params.filter(function(p){return p.ok;}).length;
+    var allPass=nPass===params.length;
+    return Object.assign({},reg,{params:params,allPass:allPass,nPass:nPass});
+  });
+
+  var totalPass=frameworks.filter(function(f){return f.allPass;}).length;
+  var totalFail=frameworks.length-totalPass;
+
+  return (
+    <div className="card" style={{padding:16}}>
+      {/* Header */}
+      <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',marginBottom:10,flexWrap:'wrap',gap:6}}>
+        <div>
+          <div style={{fontSize:10,fontWeight:700,textTransform:'uppercase',letterSpacing:'.07em',color:'#475569'}}>
+            Cumplimiento Normativo Configurado
+          </div>
+          <div style={{fontSize:9.5,color:'#94a3b8',marginTop:1}}>
+            {PLANT_CONFIG.plant_name} · {PLANT_CONFIG.jurisdiction}
+          </div>
+        </div>
+        <div style={{padding:'3px 10px',borderRadius:5,fontSize:10,fontWeight:700,
+                     background:totalFail===0?'#f0fdf4':'#fef2f2',
+                     color:totalFail===0?'#166534':'#991b1b',
+                     border:'1px solid '+(totalFail===0?'#bbf7d0':'#fecaca')}}>
+          {totalFail===0?('✓ '+totalPass+'/'+frameworks.length+' marcos en cumplimiento'):(totalFail+' marco'+(totalFail>1?'s':'')+' con desvío')}
+        </div>
+      </div>
+
+      {/* Framework list */}
+      <div style={{display:'flex',flexDirection:'column',gap:8}}>
+        {frameworks.map(function(reg){
+          var col=reg.allPass?'#16a34a':'#dc2626';
+          var bg=reg.allPass?'#f0fdf4':'#fef2f2';
+          var border=reg.allPass?'#bbf7d0':'#fecaca';
+          return (
+            <div key={reg.id} style={{borderRadius:7,border:'1px solid '+border,background:bg,padding:'8px 10px'}}>
+              {/* Framework header */}
+              <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:6}}>
+                <div>
+                  <span style={{fontSize:10.5,fontWeight:700,color:reg.allPass?'#166534':'#991b1b'}}>{reg.name}</span>
+                  <span style={{fontSize:9,color:'#94a3b8',marginLeft:6}}>{reg.authority}</span>
+                </div>
+                <span style={{fontSize:10,fontWeight:700,color:col,padding:'1px 8px',borderRadius:4,
+                              background:col+'12',border:'1px solid '+col+'25'}}>
+                  {reg.allPass?('✓ Cumple '+reg.nPass+'/'+reg.params.length):('✗ Desvío '+(reg.params.length-reg.nPass)+'/'+reg.params.length)}
+                </span>
+              </div>
+              {/* Parameter chips */}
+              <div style={{display:'flex',flexWrap:'wrap',gap:4}}>
+                {reg.params.map(function(p){
+                  return (
+                    <span key={p.label} style={{
+                      display:'inline-flex',alignItems:'center',gap:3,
+                      padding:'2px 7px',borderRadius:4,fontSize:9.5,
+                      background:p.ok?'#dcfce7':'#fee2e2',
+                      border:'1px solid '+(p.ok?'#86efac':'#fca5a5'),
+                      color:p.ok?'#166534':'#991b1b',
+                    }}>
+                      <span style={{fontWeight:700}}>{p.ok?'✓':'✗'}</span>
+                      <span style={{fontFamily:'monospace'}}>{p.label}:</span>
+                      <span style={{fontWeight:700}}>{p.val}{p.unit&&' '+p.unit}</span>
+                      {p.est&&<span style={{fontSize:7.5,color:'#94a3b8'}}>(est.)</span>}
+                      {!p.ok&&<span style={{color:'#94a3b8',fontSize:8.5}}>lím.{p.limitStr}</span>}
+                    </span>
+                  );
+                })}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      {totalFail>0&&(
+        <div style={{marginTop:8,padding:'5px 10px',borderRadius:5,background:'#fef2f2',
+                     border:'1px solid #fecaca',fontSize:10,color:'#991b1b',lineHeight:1.5}}>
+          ⚠ Se detectaron desvíos en {totalFail} marco{totalFail>1?'s':''} regulatorio{totalFail>1?'s':''}. Notificar responsable ambiental e iniciar acciones correctivas.
+        </div>
+      )}
+      <div style={{marginTop:6,fontSize:8.5,color:'#94a3b8',textAlign:'right'}}>
+        Configuración actualizada: {PLANT_CONFIG.config_date} · Cuerpo receptor: {PLANT_CONFIG.receiver}
+      </div>
+    </div>
+  );
+}
+
+// ── Risk Gauge Card ───────────────────────────────────────────────────────────
+function RiskGaugeCard(props){
+  var risk=props.risk||0, ai=props.ai||{};
+  var col=risk>=70?'#ef4444':risk>=35?'#f59e0b':'#22c55e';
+  var riskLabel=risk>=70?'RIESGO ALTO':risk>=35?'RIESGO MODERADO':'RIESGO BAJO';
+  var r=52, circ=2*Math.PI*r;
+  return (
+    <div className="card" style={{padding:16}}>
+      <div style={{fontSize:9.5,fontWeight:700,textTransform:'uppercase',letterSpacing:'.07em',color:'#475569',marginBottom:12}}>
+        Probabilidad de Incumplimiento — 24–48 h
+      </div>
+      <div style={{display:'flex',alignItems:'center',gap:14}}>
+        <div style={{position:'relative',width:120,height:120,flexShrink:0}}>
+          <svg viewBox="0 0 120 120" style={{width:120,height:120,transform:'rotate(-90deg)'}}>
+            <circle cx="60" cy="60" r={r} fill="none" stroke="#f1f5f9" strokeWidth="8"/>
+            <circle cx="60" cy="60" r={r} fill="none" stroke={col} strokeWidth="8"
+              strokeDasharray={(circ*risk/100)+' '+circ} strokeLinecap="round"
+              style={{filter:'drop-shadow(0 0 4px '+col+'40)',transition:'stroke-dasharray .7s'}}/>
+          </svg>
+          <div style={{position:'absolute',inset:0,display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center'}}>
+            <span style={{fontSize:24,fontWeight:800,color:col,lineHeight:1}}>{risk}%</span>
+            <span style={{fontSize:8,color:'#94a3b8',marginTop:2}}>PROB.</span>
+          </div>
+        </div>
+        <div style={{flex:1}}>
+          <div style={{fontSize:13,fontWeight:700,color:col,marginBottom:6}}>{riskLabel}</div>
+          <div style={{fontSize:10.5,color:'#475569',lineHeight:1.6,marginBottom:8}}>
+            Probabilidad estimada (IA) de superar límites regulatorios en las próximas 24–48 h.
+          </div>
+          <div style={{display:'flex',flexDirection:'column',gap:3,marginBottom:8}}>
+            {[{l:'DBO₅',v:'≤ 50 mg/L'},{l:'NH₄⁺',v:'≤ 35 mg/L'},{l:'SST',v:'≤ 35 mg/L'}].map(function(p){
+              return <div key={p.l} style={{display:'flex',justifyContent:'space-between'}}>
+                <span style={{fontSize:10.5,color:'#64748b'}}>{p.l}</span>
+                <span style={{fontSize:10.5,color:'#94a3b8',fontFamily:'monospace'}}>{p.v}</span>
+              </div>;
+            })}
+          </div>
+          <div style={{padding:'6px 10px',borderRadius:5,background:'#f8fafc',border:'1px solid #e2e8f0'}}>
+            <div style={{display:'flex',alignItems:'baseline',gap:5}}>
+              <span style={{fontSize:18,fontWeight:800,color:col}}>{ai.risk_pct||risk}%</span>
+              <span style={{fontSize:10,color:'#475569'}}>
+                {(ai.prediction||'compliant')==='non_compliant'?'incumplimiento estimado':'cumplimiento estimado'}
+              </span>
+            </div>
+            <div style={{fontSize:9,color:'#94a3b8',marginTop:1}}>
+              {ai.ai_ready?'Modelo activo':'Simulado'} · Recall 90% · {(ai.model_metrics||{}).accuracy?((ai.model_metrics.accuracy*100).toFixed(0)+'% acc'):'93.9% acc'}
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── Recommendations ───────────────────────────────────────────────────────────
+function Recommendations(props){
+  var items=props.items||[];
+  var SIG_COL={'BHI':'#6366f1','EcoSentinel':'#0891b2','EcoSentinel + OD':'#0891b2',
+               'OD + EcoSentinel':'#0891b2','Vibrio':'#7c3aed','NH₄⁺':'#ea580c',
+               'NH₄⁺ / Normativa':'#ea580c','OD':'#0284c7','pH':'#16a34a',
+               'Normativa':'#dc2626','Cumplimiento':'#6366f1'};
+  return (
+    <div className="card" style={{padding:16}}>
+      <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:12}}>
+        <span style={{fontSize:9.5,fontWeight:700,textTransform:'uppercase',letterSpacing:'.07em',color:'#475569'}}>Recomendaciones Operativas</span>
+        <span style={{fontSize:11,color:'#94a3b8'}}>{items.length} {items.length===1?'acción':'acciones'}</span>
+      </div>
+      <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(275px,1fr))',gap:7}}>
+        {items.map(function(item,i){
+          var st=PRIORITY_CFG[item.priority]||PRIORITY_CFG.info;
+          var sigCol=SIG_COL[item.signal]||'#64748b';
+          return (
+            <div key={i} style={{borderRadius:7,padding:'9px 11px',border:'1px solid '+st.border,background:st.bg}}>
+              <div style={{display:'flex',gap:5,alignItems:'flex-start',marginBottom:5}}>
+                <span style={{flexShrink:0,fontSize:8.5,fontWeight:700,padding:'2px 5px',borderRadius:3,
+                              color:st.text,border:'1px solid '+st.border,background:'rgba(255,255,255,.5)'}}>
+                  {st.badge}
+                </span>
+                {item.signal&&<span style={{flexShrink:0,fontSize:8.5,fontWeight:600,padding:'2px 6px',borderRadius:3,
+                                            color:sigCol,background:sigCol+'12',border:'1px solid '+sigCol+'25'}}>
+                  {item.signal}
+                </span>}
+              </div>
+              <p style={{fontSize:11.5,color:'#0f172a',lineHeight:1.4,margin:'0 0 5px'}}>{item.action}</p>
+              <div style={{display:'flex',justifyContent:'space-between',flexWrap:'wrap',gap:3}}>
+                <span style={{fontSize:10,color:'#64748b'}}>↳ {item.impact}</span>
+                {item.timeframe&&<span style={{fontSize:9.5,color:'#475569',fontWeight:600,
+                                               padding:'1px 6px',borderRadius:3,
+                                               background:'rgba(255,255,255,.7)',border:'1px solid #e2e8f0'}}>
+                  {item.timeframe}
+                </span>}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+// ── Historical Patterns Panel — plant-specific learning ───────────────────────
+function HistoricalPatternsPanel(){
+  var _d=useState(false); var defOpen=_d[0];
+  function toggleDef(){ _d[1](function(v){ return !v; }); }
+  var pp=PLANT_PATTERNS;
+  var maxPct=pp.signals.reduce(function(m,s){ return Math.max(m,s.pct); },1);
+
+  function barColor(pct){
+    if(pct>=70) return '#ef4444';
+    if(pct>=50) return '#f97316';
+    if(pct>=35) return '#f59e0b';
+    return '#84cc16';
+  }
+
+  return (
+    <div className="card" style={{padding:16}}>
+      {/* Header */}
+      <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',marginBottom:12,flexWrap:'wrap',gap:8}}>
+        <div>
+          <div style={{fontSize:10,fontWeight:700,textTransform:'uppercase',letterSpacing:'.07em',color:'#475569',marginBottom:2}}>
+            Patrones históricos de riesgo
+          </div>
+          <div style={{fontSize:11,color:'#64748b'}}>
+            {PLANT_CONFIG.plant_name} · {pp.observation_period} de operación
+          </div>
+        </div>
+        <div style={{display:'flex',gap:8,alignItems:'center'}}>
+          <div style={{padding:'4px 12px',borderRadius:5,background:'#fef9c3',border:'1px solid #fde68a',
+                       fontSize:10,fontWeight:600,color:'#92400e'}}>
+            {pp.total_events} eventos críticos analizados
+          </div>
+          <div style={{padding:'4px 10px',borderRadius:5,background:'#f0f9ff',border:'1px solid #bae6fd',
+                       fontSize:9.5,color:'#0369a1'}}>
+            {pp.observation_period}
+          </div>
+        </div>
+      </div>
+
+      {/* Critical event definition */}
+      <div style={{marginBottom:12,background:'#f8fafc',borderRadius:6,border:'1px solid #e2e8f0',overflow:'hidden'}}>
+        <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',
+                     padding:'7px 12px',cursor:'pointer',userSelect:'none'}}
+             onClick={toggleDef}>
+          <span style={{fontSize:10,fontWeight:600,color:'#475569'}}>
+            ℹ Definición de evento crítico
+          </span>
+          <span style={{color:'#94a3b8',fontSize:11,transform:defOpen?'rotate(0deg)':'rotate(-90deg)',transition:'transform .2s'}}>▾</span>
+        </div>
+        {defOpen&&(
+          <div style={{padding:'0 12px 10px',borderTop:'1px solid #e2e8f0'}}>
+            <div style={{fontSize:10,color:'#64748b',marginBottom:4,paddingTop:8}}>
+              Se considera evento crítico cuando se cumple al menos una de las siguientes condiciones:
+            </div>
+            {pp.event_def.map(function(def,i){
+              return <div key={i} style={{display:'flex',alignItems:'center',gap:6,marginBottom:3}}>
+                <span style={{color:'#f59e0b',fontSize:11}}>⚠</span>
+                <span style={{fontSize:10,color:'#475569'}}>{def}</span>
+              </div>;
+            })}
+          </div>
+        )}
+      </div>
+
+      {/* Signal association table */}
+      <div style={{marginBottom:4}}>
+        <div style={{display:'grid',gridTemplateColumns:'1fr 180px 52px 54px',gap:8,
+                     padding:'5px 8px',marginBottom:4}}>
+          <span style={{fontSize:8.5,fontWeight:700,color:'#94a3b8',textTransform:'uppercase',letterSpacing:'.06em'}}>Señal observada</span>
+          <span style={{fontSize:8.5,fontWeight:700,color:'#94a3b8',textTransform:'uppercase',letterSpacing:'.06em'}}>Asociación</span>
+          <span style={{fontSize:8.5,fontWeight:700,color:'#94a3b8',textTransform:'uppercase',letterSpacing:'.06em',textAlign:'right'}}>%</span>
+          <span style={{fontSize:8.5,fontWeight:700,color:'#94a3b8',textTransform:'uppercase',letterSpacing:'.06em',textAlign:'right'}}>Eventos</span>
+        </div>
+        {pp.signals.map(function(sig){
+          var col=barColor(sig.pct);
+          var barW=Math.round((sig.pct/maxPct)*100);
+          return (
+            <div key={sig.signal} style={{display:'grid',gridTemplateColumns:'1fr 180px 52px 54px',
+                                          gap:8,alignItems:'center',padding:'6px 8px',
+                                          borderRadius:5,marginBottom:3,
+                                          background:sig.pct>=60?'#fff7ed':'#f8fafc',
+                                          border:'1px solid '+(sig.pct>=60?'#fed7aa':'#f1f5f9')}}>
+              <div style={{display:'flex',alignItems:'center',gap:6}}>
+                <span style={{fontSize:13}}>{sig.icon}</span>
+                <span style={{fontSize:11,color:'#475569',lineHeight:1.3}}>{sig.signal}</span>
+              </div>
+              <div style={{height:8,borderRadius:4,background:'#f1f5f9',overflow:'hidden'}}>
+                <div style={{height:'100%',borderRadius:4,background:col,width:barW+'%',
+                             transition:'width .6s'}}/>
+              </div>
+              <span style={{fontSize:12,fontWeight:800,color:col,textAlign:'right'}}>{sig.pct}%</span>
+              <span style={{fontSize:10,color:'#94a3b8',textAlign:'right'}}>{sig.events}/{pp.total_events}</span>
+            </div>
+          );
+        })}
+      </div>
+
+      {/* Disclaimer */}
+      <div style={{padding:'8px 12px',borderRadius:6,background:'#f8fafc',border:'1px solid #e2e8f0',
+                   marginTop:6}}>
+        <div style={{fontSize:9.5,color:'#64748b',lineHeight:1.6}}>
+          <strong style={{color:'#475569'}}>Nota metodológica:</strong> Basado en los eventos críticos registrados en esta planta durante los últimos {pp.observation_period}. Estos porcentajes reflejan <em>asociaciones históricas</em> y ayudan a priorizar el monitoreo preventivo. <strong>No implican causalidad directa.</strong> Cada planta genera sus propios patrones según sus condiciones operativas específicas.
+        </div>
+      </div>
+
+      {/* Connection to predictive model */}
+      <div style={{marginTop:8,padding:'6px 12px',borderRadius:5,background:'#ede9fe',border:'1px solid #c4b5fd',
+                   display:'flex',alignItems:'center',gap:8}}>
+        <span style={{fontSize:10,color:'#6d28d9',lineHeight:1.5}}>
+          El modelo predictivo integra estos patrones históricos con las señales en tiempo real para estimar el riesgo de incumplimiento en las próximas 24–48 horas.
+        </span>
+      </div>
+    </div>
+  );
+}
+
+// ── Scientific Framework Footer ───────────────────────────────────────────────
+function ScientificFramework(){
+  var items=[
+    {color:'#10b981', label:'Sludge Biotic Index (Madoni, 1994)', sub:'Interpretación de la comunidad microbiana'},
+    {color:'#0891b2', label:'ISO 11348 — Vibrio fischeri',        sub:'Ensayo de toxicidad por bioluminiscencia'},
+    {color:'#0369a1', label:'Decreto Nacional 674/89',            sub:'Marco regulatorio nacional'},
+    {color:'#7c3aed', label:'Normativa local configurada',        sub:PLANT_CONFIG.jurisdiction},
+    {color:'#6366f1', label:'Modelo predictivo adaptado a la planta', sub:PLANT_CONFIG.plant_name+' · '+PLANT_PATTERNS.observation_period+' de datos'},
+  ];
+  return (
+    <div className="card" style={{padding:'12px 16px',marginTop:10}}>
+      <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:10,flexWrap:'wrap',gap:8}}>
+        <span style={{fontSize:10,fontWeight:700,textTransform:'uppercase',letterSpacing:'.07em',color:'#475569'}}>
+          Marco científico y regulatorio
+        </span>
+        <span style={{fontSize:9.5,color:'#94a3b8'}}>Respaldo metodológico del sistema</span>
+      </div>
+      <div style={{display:'flex',flexWrap:'wrap',gap:6}}>
+        {items.map(function(item,i){
+          return (
+            <div key={i} style={{display:'flex',alignItems:'center',gap:7,padding:'5px 10px',
+                                  borderRadius:6,background:'#f8fafc',border:'1px solid #e2e8f0',
+                                  flex:'1 1 240px'}}>
+              <span style={{color:item.color,fontSize:13,flexShrink:0}}>✓</span>
+              <div>
+                <div style={{fontSize:10.5,fontWeight:600,color:'#475569'}}>{item.label}</div>
+                <div style={{fontSize:9,color:'#94a3b8'}}>{item.sub}</div>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// APP
+// ══════════════════════════════════════════════════════════════════════════════
+function App(){
+  var _sc=useState('healthy'); var scenario=_sc[0],setScenario=_sc[1];
+  var _cu=useState(null);      var current=_cu[0],setCurrent=_cu[1];
+  var _hi=useState([]);        var history=_hi[0],setHistory=_hi[1];
+  var _ai=useState(null);      var aiData=_ai[0],setAiData=_ai[1];
+  var _lo=useState(true);      var loading=_lo[0],setLoading=_lo[1];
+  var _up=useState('—');       var updated=_up[0],setUpdated=_up[1];
+  var _on=useState(false);     var online=_on[0],setOnline=_on[1];
+
+  var _ml=useState(['bhi','ecosentinel_score','vibrio_inhibition']);
+  var mainActive=_ml[0],setMainActive=_ml[1];
+  var _ol=useState(['nh4','do_sat','adh']);
+  var opsActive=_ol[0],setOpsActive=_ol[1];
+
+  function toggleMain(k){ setMainActive(function(p){ return p.indexOf(k)>=0?(p.length>1?p.filter(function(x){return x!==k;}):p):p.concat([k]); }); }
+  function toggleOps(k){  setOpsActive(function(p){  return p.indexOf(k)>=0?(p.length>1?p.filter(function(x){return x!==k;}):p):p.concat([k]); }); }
+
+  var load=useCallback(function(){
+    Promise.all([
+      fetch(API+'/api/current/'+scenario),
+      fetch(API+'/api/history/'+scenario),
+      fetch(API+'/api/ai/predict/'+scenario),
+    ])
+    .then(function(rs){ return Promise.all([rs[0].json(),rs[1].json(),rs[2].json()]); })
+    .then(function(data){
+      setCurrent(data[0]); setHistory(processHistory(data[1])); setAiData(data[2]);
+      setOnline(true); setUpdated(new Date().toLocaleTimeString('es-AR')); setLoading(false);
+    })
+    .catch(function(){
+      var mock=buildMock(scenario);
+      setCurrent(mock.current); setHistory(processHistory(mock.history));
+      setAiData(buildMockAI(scenario));
+      setOnline(false); setUpdated(new Date().toLocaleTimeString('es-AR')); setLoading(false);
+    });
+  },[scenario]);
+
+  useEffect(function(){
+    setLoading(true); load();
+    var id=setInterval(load,15000);
+    return function(){clearInterval(id);};
+  },[load]);
+
+  if(loading||!current){
+    return <div style={{minHeight:'100vh',display:'flex',flexDirection:'column',
+                        alignItems:'center',justifyContent:'center',gap:14,background:'#f0f4f8'}}>
+      <div className="spin" style={{width:36,height:36,borderRadius:'50%',border:'3px solid #e2e8f0',borderTopColor:'#0891b2'}}/>
+      <p style={{color:'#64748b',fontSize:13}}>Inicializando Biovant…</p>
+    </div>;
+  }
+
+  var s=current, st=s.status, stCol=STATUS_COLOR[st]||'#6366f1';
+  var sen=s.sensors||{}, tr=sen.trends||{};
+  var eco=s.ecosentinel||{}, vib=s.vibrio||{};
+
+  // Merge mock Vibrio timing if API didn't return it (offline mode)
+  if(!vib.sample_time){
+    var mockTiming=getMockVibrioTiming(4);
+    vib=Object.assign({},vib,mockTiming);
+  }
+
+  return (
+    <div style={{minHeight:'100vh',background:'#f0f4f8'}}>
+
+      {/* Alert banner */}
+      {st==='red'&&<div style={{background:'#fef2f2',borderBottom:'2px solid #fecaca',
+                                padding:'7px 20px',display:'flex',alignItems:'center',gap:10}}>
+        <span className="pulse" style={{width:7,height:7,borderRadius:'50%',background:'#ef4444',display:'inline-block',flexShrink:0}}/>
+        <span style={{color:'#b91c1c',fontSize:12,fontWeight:600}}>
+          ALERTA CRÍTICA — Biomasa en riesgo de colapso biológico. Acción inmediata requerida. (Decreto 674/89)
+        </span>
+      </div>}
+      {st==='yellow'&&<div style={{background:'#fffbeb',borderBottom:'1px solid #fde68a',
+                                   padding:'5px 20px',display:'flex',alignItems:'center',gap:8}}>
+        <span className="pulse" style={{width:6,height:6,borderRadius:'50%',background:'#f59e0b',display:'inline-block',flexShrink:0}}/>
+        <span style={{color:'#92400e',fontSize:12}}>Biomasa bajo estrés — monitoreo intensivo activo.</span>
+      </div>}
+
+      {/* Header */}
+      <header style={{borderBottom:'1px solid #e2e8f0',padding:'8px 20px',background:'#ffffff',
+                      boxShadow:'0 1px 3px rgba(0,0,0,0.04)'}}>
+        <div style={{maxWidth:1300,margin:'0 auto',display:'flex',alignItems:'center',
+                     justifyContent:'space-between',flexWrap:'wrap',gap:10}}>
+          <div style={{display:'flex',alignItems:'center',gap:12}}>
+            <div style={{width:36,height:36,borderRadius:8,background:'#f0f9ff',
+                         border:'1px solid #bae6fd',display:'flex',alignItems:'center',
+                         justifyContent:'center',fontSize:20}}>🧬</div>
+            <div>
+              <div style={{fontWeight:800,fontSize:18,color:'#0f172a',letterSpacing:'.01em'}}>Biovant</div>
+              <div style={{color:'#64748b',fontSize:10,letterSpacing:'.03em'}}>Plataforma de Inteligencia Biológica Predictiva</div>
+            </div>
+          </div>
+          <div style={{display:'flex',alignItems:'center',gap:18,fontSize:11}}>
+            <div>
+              <div style={{color:'#94a3b8',fontSize:9}}>Planta</div>
+              <div style={{color:'#475569',fontWeight:600}}>{PLANT_CONFIG.plant_name}</div>
+            </div>
+            <div style={{display:'flex',alignItems:'center',gap:5,color:'#475569'}}>
+              <span className={online?'pulse':''} style={{width:6,height:6,borderRadius:'50%',
+                    display:'inline-block',background:online?'#10b981':'#f59e0b'}}/>
+              {online?'API activa':'Simulado'}
+            </div>
+            <div style={{color:'#94a3b8'}}>Act.: <span style={{color:'#475569',fontWeight:500}}>{updated}</span></div>
+          </div>
+        </div>
+      </header>
+
+      {/* Scenario tabs */}
+      <div style={{borderBottom:'1px solid #e2e8f0',padding:'5px 20px',background:'#f8fafc'}}>
+        <div style={{maxWidth:1300,margin:'0 auto',display:'flex',alignItems:'center',flexWrap:'wrap',gap:7}}>
+          <span style={{fontSize:9,fontWeight:700,textTransform:'uppercase',letterSpacing:'.08em',color:'#94a3b8',marginRight:4}}>Escenario:</span>
+          {SCENARIOS_CFG.map(function(sc2){
+            var on=scenario===sc2.id;
+            return <button key={sc2.id} onClick={function(){setScenario(sc2.id);}}
+              style={{fontSize:11,padding:'3px 14px',borderRadius:6,cursor:'pointer',
+                      fontWeight:500,fontFamily:'system-ui',transition:'all .15s',
+                      background:on?sc2.color+'12':'transparent',
+                      color:on?sc2.color:'#64748b',
+                      border:'1px solid '+(on?sc2.color+'45':'#e2e8f0')}}>
+              {sc2.label}
+            </button>;
+          })}
+        </div>
+      </div>
+
+      {/* Main content */}
+      <main style={{maxWidth:1300,margin:'0 auto',padding:'4px 20px 28px',display:'flex',flexDirection:'column',gap:2}}>
+
+        {/* ── 1. Estado General ── */}
+        <Collapsible num="1" title="Estado General del Sistema">
+          <div style={{display:'grid',gridTemplateColumns:'200px 1fr',gap:10,marginBottom:8}}>
+            <div className="card" style={{padding:'12px 14px',display:'flex',flexDirection:'column',alignItems:'center',gap:6}}>
+              <div style={{display:'flex',justifyContent:'space-between',width:'100%',alignItems:'center'}}>
+                <span style={{fontSize:8.5,fontWeight:700,textTransform:'uppercase',letterSpacing:'.06em',color:'#64748b'}}>Biomass Health Index</span>
+                <div style={{display:'flex',alignItems:'center',gap:4,padding:'2px 7px',borderRadius:99,
+                             fontSize:9.5,fontWeight:700,background:stCol+'12',color:stCol,border:'1px solid '+stCol+'35'}}>
+                  <span className="pulse" style={{width:5,height:5,borderRadius:'50%',background:stCol,display:'inline-block'}}/>
+                  {s.bhi>=75?'Normal':s.bhi>=50?'Alerta':'Crítico'}
+                </div>
+              </div>
+              <BHIGauge value={s.bhi} status={st}/>
+              <TrafficLight status={st}/>
+            </div>
+            <div style={{display:'flex',flexDirection:'column',gap:8}}>
+              <div className="card" style={{padding:'11px 14px'}}>
+                <div style={{display:'flex',alignItems:'center',gap:9,marginBottom:5}}>
+                  <div style={{width:9,height:9,borderRadius:'50%',background:stCol}} className="pulse"/>
+                  <span style={{fontSize:15,fontWeight:700,color:stCol}}>{STATUS_LABEL[st]||'—'}</span>
+                  <span style={{fontSize:12,color:'#94a3b8'}}>— BHI {s.bhi}/100</span>
+                </div>
+                <p style={{fontSize:11.5,color:'#475569',lineHeight:1.55,margin:0}}>{STATUS_TEXT[st]}</p>
+              </div>
+              <div style={{display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:8}}>
+                <SensorMini label="Act. Deshidrogenasa" val={sen.adh_unit} unit="μg TTF/h"
+                  ok={sen.adh>70?'good':sen.adh>40?'warn':'bad'} pct={sen.adh||0} trend={tr.adh}/>
+                <SensorMini label="Oxígeno Disuelto" val={sen.do_mgl} unit="mg/L"
+                  ok={sen.do_sat>60?'good':sen.do_sat>30?'warn':'bad'} pct={sen.do_sat||0} trend={tr.od}/>
+                <SensorMini label="Amonio NH₄⁺" val={sen.nh4_mgl} unit="mg/L"
+                  inv={true} ok={sen.nh4_mgl<25?'good':sen.nh4_mgl<50?'warn':'bad'}
+                  pct={Math.round(clamp((sen.nh4_mgl||0)/1.5,0,100))} trend={tr.nh4}/>
+              </div>
+            </div>
+          </div>
+          <div style={{display:'grid',gridTemplateColumns:'repeat(9,1fr)',gap:7}}>
+            <SensorMini label="pH" val={sen.ph} unit=""
+              ok={sen.ph>=6.8&&sen.ph<=7.5?'good':sen.ph>=6.2&&sen.ph<=8.2?'warn':'bad'}
+              pct={Math.round(clamp(((sen.ph||7)-4.5)/5*100,0,100))} trend={tr.ph}/>
+            <SensorMini label="Toxicidad" val={sen.toxicity} unit="%"
+              inv={true} ok={sen.toxicity<20?'good':sen.toxicity<50?'warn':'bad'}
+              pct={sen.toxicity||0} trend={tr.tox}/>
+            <SensorMini label="Temperatura" val={(sen.temperatura||22).toFixed(1)} unit="°C"
+              ok={sen.temperatura>=18&&sen.temperatura<=32?'good':'warn'}
+              pct={Math.round(clamp(((sen.temperatura||22)-5)/40*100,0,100))} trend={tr.temp}/>
+            <SensorMini label="DBO₅" val={(sen.dbo5_mgl||0).toFixed(0)} unit="mg/L"
+              inv={true} est={true}
+              ok={sen.dbo5_mgl<=50?'good':sen.dbo5_mgl<=150?'warn':'bad'}
+              pct={Math.round(clamp((sen.dbo5_mgl||0)/8,0,100))} trend={tr.dbo5}/>
+            <SensorMini label="DQO" val={(sen.dqo_mgl||0).toFixed(0)} unit="mg/L"
+              inv={true} est={true}
+              ok={sen.dqo_mgl<=120?'good':sen.dqo_mgl<=350?'warn':'bad'}
+              pct={Math.round(clamp((sen.dqo_mgl||0)/20,0,100))} trend={tr.dqo}/>
+            <SensorMini label="Caudal" val={(sen.caudal_m3h||0).toFixed(1)} unit="m³/h"
+              inv={true}
+              ok={sen.caudal_m3h<=28?'good':sen.caudal_m3h<=45?'warn':'bad'}
+              pct={Math.round(clamp(sen.caudal_m3h||0,0,100))} trend={tr.caudal}/>
+            <SensorMini label="EcoSentinel" val={eco.score||0} unit="/100"
+              ok={eco.score>=70?'good':eco.score>=45?'warn':'bad'} pct={eco.score||0}/>
+            <SensorMini label="Vibrio Inh." val={(vib.inhibition_pct||0)+'%'} unit=""
+              inv={true}
+              ok={vib.inhibition_pct<20?'good':vib.inhibition_pct<50?'warn':'bad'}
+              pct={vib.inhibition_pct||0}/>
+            <SensorMini label="Riesgo 24h" val={s.compliance_risk+'%'} unit=""
+              inv={true}
+              ok={s.compliance_risk<35?'good':s.compliance_risk<70?'warn':'bad'}
+              pct={s.compliance_risk||0}/>
+          </div>
+        </Collapsible>
+
+        {/* ── 2. Inteligencia Biológica ── */}
+        <Collapsible num="2" title="Inteligencia Biológica — EcoSentinel™ + Vibrio Sentinel™">
+          <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10}}>
+            <EcoSentinelCard data={eco} scenario={scenario}/>
+            <VibrioCard data={vib}/>
+          </div>
+        </Collapsible>
+
+        {/* ── 3. Evolución Temporal ── */}
+        <Collapsible num="3" title="Evolución Temporal — Últimas 24 horas">
+          <div className="card" style={{padding:16,marginBottom:10}}>
+            <div style={{fontSize:9.5,fontWeight:700,textTransform:'uppercase',letterSpacing:'.06em',color:'#64748b',marginBottom:10}}>
+              Tendencias principales — BHI · EcoSentinel Score · Vibrio Inhibición
+            </div>
+            <SVGChart data={history} lines={MAIN_LINES} active={mainActive} toggle={toggleMain}/>
+          </div>
+          <div className="card" style={{padding:16}}>
+            <div style={{fontSize:9.5,fontWeight:700,textTransform:'uppercase',letterSpacing:'.06em',color:'#64748b',marginBottom:10}}>
+              Tendencias operativas — variables normalizadas 0–100
+            </div>
+            <SVGChart data={history} lines={OPS_LINES} active={opsActive} toggle={toggleOps}/>
+          </div>
+        </Collapsible>
+
+        {/* ── 4. Riesgo Predictivo + Cumplimiento + Recomendaciones ── */}
+        <Collapsible num="4" title="Riesgo Predictivo de Incumplimiento — Decreto 674/89">
+          <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10,marginBottom:10}}>
+            <RiskGaugeCard risk={s.compliance_risk} ai={aiData||{}}/>
+            <ConfiguredComplianceCard sensors={sen}/>
+          </div>
+          <div style={{fontSize:11,fontWeight:600,color:'#475569',marginBottom:6,paddingLeft:1}}>¿Qué debo hacer ahora?</div>
+          <Recommendations items={s.recommendations||[]}/>
+        </Collapsible>
+
+        {/* ── 5. Lecciones aprendidas ── */}
+        <Collapsible num="5" title="Patrones históricos de riesgo">
+          <HistoricalPatternsPanel/>
+        </Collapsible>
+
+        {/* Scientific Framework */}
+        <ScientificFramework/>
+
+      </main>
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById('root')).render(React.createElement(App,null));
+</script>
+</body>
+</html>

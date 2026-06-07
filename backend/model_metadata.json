@@ -1,0 +1,77 @@
+{
+  "features": [
+    "adh_ugTTF_gVSS_h",
+    "od_mgl",
+    "nh4_mgl",
+    "toxicity_pct",
+    "ph",
+    "temperatura_c",
+    "caudal_m3h"
+  ],
+  "feature_importances": {
+    "od_mgl": 0.261614,
+    "nh4_mgl": 0.257496,
+    "toxicity_pct": 0.16274,
+    "adh_ugTTF_gVSS_h": 0.160496,
+    "caudal_m3h": 0.09115,
+    "ph": 0.040347,
+    "temperatura_c": 0.026159
+  },
+  "feature_importances_sorted": [
+    {
+      "key": "od_mgl",
+      "importance": 0.261614,
+      "importance_pct": 26.2
+    },
+    {
+      "key": "nh4_mgl",
+      "importance": 0.257496,
+      "importance_pct": 25.7
+    },
+    {
+      "key": "toxicity_pct",
+      "importance": 0.16274,
+      "importance_pct": 16.3
+    },
+    {
+      "key": "adh_ugTTF_gVSS_h",
+      "importance": 0.160496,
+      "importance_pct": 16.0
+    },
+    {
+      "key": "caudal_m3h",
+      "importance": 0.09115,
+      "importance_pct": 9.1
+    },
+    {
+      "key": "ph",
+      "importance": 0.040347,
+      "importance_pct": 4.0
+    },
+    {
+      "key": "temperatura_c",
+      "importance": 0.026159,
+      "importance_pct": 2.6
+    }
+  ],
+  "metrics": {
+    "accuracy": 0.939,
+    "recall": 0.8998,
+    "precision": 0.9679,
+    "f1": 0.9326
+  },
+  "confusion_matrix": [
+    [
+      1034,
+      28
+    ],
+    [
+      94,
+      844
+    ]
+  ],
+  "n_train": 8000,
+  "n_test": 2000,
+  "n_estimators": 100,
+  "target": "non_compliant (DBO5>50 OR NH4+>35)"
+}
